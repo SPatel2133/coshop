@@ -77,10 +77,10 @@ test("new session and invite are independent cryptographic credentials; server o
     code: "INVALID_LINK",
   });
 });
-test("six equal seats, no owner powers; rejected seventh join leaves no partial record", async (t) => {
+test("ten equal seats, no owner powers; rejected eleventh join leaves no partial record", async (t) => {
   const { rooms, id, store } = setup(t);
   rooms.create(id, { name: "Maya", avatar: "sage" }, await digest(newToken()));
-  for (let i = 0; i < 5; i++)
+  for (let i = 0; i < 9; i++)
     rooms.join(
       id,
       { name: "Friend", avatar: "clay" },
@@ -90,8 +90,9 @@ test("six equal seats, no owner powers; rejected seventh join leaves no partial 
     () => rooms.join(id, { name: "Extra", avatar: "sky" }, "extra-hash"),
     { code: "ROOM_FULL" },
   );
-  assert.equal(rooms.snapshot(id).participants.length, 6);
-  assert.equal(store.all("SELECT * FROM participants").length, 6);
+  assert.equal(rooms.snapshot(id).capacity, 10);
+  assert.equal(rooms.snapshot(id).participants.length, 10);
+  assert.equal(store.all("SELECT * FROM participants").length, 10);
   assert.ok(!("owner" in rooms.snapshot(id)));
 });
 test("valid token rejoins same identity without duplication; invalid token cannot claim a seat", async (t) => {
@@ -134,10 +135,10 @@ test("disconnect keeps seat for exactly ten minutes; valid identity can reclaim 
   assert.equal(rooms.auth(id, "maya").id, maya.id);
   tick(1);
   assert.equal(rooms.snapshot(id).participants.length, 0);
-  for (let i = 0; i < 6; i++)
+  for (let i = 0; i < 10; i++)
     rooms.join(id, { name: "Friend", avatar: "clay" }, "friend-" + i);
   assert.throws(() => rooms.auth(id, "maya"), { code: "ROOM_FULL" });
-  assert.equal(rooms.snapshot(id).participants.length, 6);
+  assert.equal(rooms.snapshot(id).participants.length, 10);
 });
 test("released identity can safely return when there is room, including a new name collision", (t) => {
   const { rooms, id, tick } = setup(t);

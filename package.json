@@ -7,7 +7,7 @@
     "dev:cloudflare": "wrangler dev --ip 0.0.0.0 --port 4194",
     "build": "node scripts/build.mjs",
     "deploy:cloudflare": "node scripts/build.mjs && wrangler deploy",
-    "test": "node --test tests/phase1-*.test.mjs tests/phase2-*.test.mjs tests/phase3-*.test.mjs tests/shopify.test.mjs"
+    "test": "node --test tests/phase1-*.test.mjs tests/phase2-*.test.mjs tests/phase3-*.test.mjs tests/phase4-*.test.mjs tests/phase5-*.test.mjs tests/phase6-*.test.mjs tests/discussion.test.mjs tests/shopify.test.mjs"
   },
   "packageManager": "pnpm@11.25.0",
   "dependencies": {

@@ -2,7 +2,62 @@
 
 A shared shopping room for friends already on a call. **Share find** means “worth looking at together.” The persistent **Our finds** collection is separate from the bag: sharing never adds a purchase item. Everyone browses independently, without popups or automatic navigation.
 
-**Current source:** the Phase 3 sharing redesign. Vanilla JavaScript, Node/SQLite and Cloudflare SQLite Durable Objects remain. No new provider, account or hosting setup. The Node preview is **http://localhost:4195**; the existing temporary public tunnel continues while the laptop and both processes stay running. The older [Sites deployment](https://coshop.valiantartichoke2.chatgpt.site) is unchanged and does not demonstrate this version.
+**Current source:** Phase 6. **Start a shopping room** opens the mixed sample collection. **Try Shopify checkout** creates a separate room with live product data and hosted checkout when Shopify is configured. Both Node/SQLite and Cloudflare SQLite Durable Objects use the same room domain. The Node server defaults to **http://localhost:4193**. The older [Sites deployment](https://coshop.valiantartichoke2.chatgpt.site) does not demonstrate this version.
+
+## Phase 6: The haul
+
+Create a sample room, join in a second window, share a find, and have each shopper add something to the bag. Open the bag and choose **Demo completion · simulated**. The recap shows exact variants, quantities, pickers, an estimated total, and up to three most-shared variants. The other shopper sees a banner and can open the same recap; refreshing preserves it. This does not place an order or change the bag.
+
+For paid recaps on a store you control, register an HTTPS `orders/paid` subscription at `/api/shopify/orders-paid`, using an app with order access, and set `SHOPIFY_WEBHOOK_SECRET` to the signing secret for that subscription. Keep it server-side. Include the unfiltered order payload, or retain `admin_graphql_api_id`, `financial_status`, `cart_token`, `note_attributes`, `line_items`, `total_price_set`, `total_price`, and `currency` when configuring the subscription. See Shopify's [webhook reference](https://shopify.dev/docs/api/webhooks/latest) and [signature verification guide](https://shopify.dev/docs/apps/build/webhooks/verify-deliveries).
+
+Only a verified event matching the configured store, checkout marker, and cart token creates a paid recap. The line items and total come from Shopify; picker names and share counts come from the saved room snapshot. Delivery retries are deduplicated, and buyer contact, shipping, and payment details are not retained. Going back from checkout only unlocks the bag. Migration `0007_haul.sql` adds checkout correlation and recap records, both removed with the room. The public demo store's webhook isn't configured, so its checkout handoff does not produce a paid recap on the preview.
+
+## Phase 5: Shopify checkout
+
+Run `pnpm install --frozen-lockfile` with Node 24+. Copy `.env.example` to `.env` for Node or `.dev.vars.example` to `.dev.vars` for local Wrangler and set:
+
+| Variable | Value |
+| --- | --- |
+| `SHOPIFY_STORE_DOMAIN` | Your store’s `myshopify.com` domain |
+| `SHOPIFY_STOREFRONT_TOKEN` | The **public Storefront API token** |
+| `SHOPIFY_API_VERSION` | `2026-10` |
+| `SHOPIFY_BUYER_COUNTRY` | `CA` by default; choose a country your store serves |
+
+To try Shopify's demo store, copy the public example domain and token from the [Hydrogen documentation](https://shopify.dev/docs/api/hydrogen/2026-04). For your own development store, install **Headless** in Shopify admin, select **Create storefront**, then **Manage API access → Storefront API → Manage** and copy the public token. Publish products to Headless and make them available in the buyer's market. See Shopify's [Storefront setup](https://shopify.dev/docs/storefronts/headless/building-with-the-storefront-api/getting-started) and [Headless channel guide](https://shopify.dev/docs/storefronts/headless/building-with-the-storefront-api/manage-headless-channels). Tokens stay in runtime configuration; do not commit env files.
+
+Start Node with `pnpm start` at **http://localhost:4193** or run `pnpm build` followed by `pnpm dev:cloudflare` at **http://localhost:4194**. Choose **Try Shopify checkout** on the homepage, create a room and look for the store name and **Shopify · CA**. If Shopify is unconfigured or can't load its catalog, the setup form shows an error so you can retry or return to the homepage. **Start a shopping room** always opens the 24-product sample catalog, even when Shopify is configured. Each live room stays with its original store and country. Changing configuration affects new rooms; it cannot send an old room's bag to a different shop.
+
+1. Open two browser profiles or use one of the invite dialog's demo shopper links. Maya chooses an available Shopify variant and presses **Add to bag**. Sam sees the same price, quantity and picker. **Share find** still leaves the bag unchanged.
+2. Maya presses **Continue to Shopify**. Sam sees who is checking out and cannot edit the bag. Maya reaches Shopify with the exact bag lines and picker attributes. Stop at checkout; for testing payment, use your own development store with a test gateway.
+3. Maya goes Back. The shared bag unlocks without removing any items. The shopper who started checkout can also unlock it, and abandoned locks expire after five minutes. Returning from checkout never marks an order as paid.
+4. If Shopify changed price or stock, review the updated bag before trying again. Missing or unavailable lines must be removed by their picker. Shopify warnings, changed cart quantities and subtotal mismatches stop the redirect.
+
+**Implementation:** `shopify.mjs` requests up to 24 products and 24 variants per product with country context. `server/storefront.js` caches catalog reads for 60 seconds; checkout does fresh variant and cart requests. `server/checkout.js` locks the current bag revision, passes buyer country and picker attributes to `cartCreate`, and returns the hosted URL only to the checkout requester. Migration `0006_storefront.sql` adds room catalog snapshots and checkout leases. It leaves existing room, invite, session, find and bag records intact. `app.js` and `client/bag.js` carry the live catalog and checkout states into the existing storefront.
+
+**Phase 4 follow-up:** **+ Comment** opens an inline composer in Our finds. **See all comments** opens the full history for that exact variant, with the same draft. The **Bag** shortcut stays available while browsing and opens the same drawer as **Shared bag** in the header. Search matches product names, descriptions, categories, and variant names across the 24 sample products, within the selected category. Search terms stay on that shopper's device.
+
+## Phase 4: Fill the shared bag
+
+Run `pnpm install --frozen-lockfile` and `pnpm start` with Node 24+ and Shopify settings unset to reproduce the original sample bag flow. Open **http://localhost:4193**. For the local Worker, follow the Cloudflare setup below.
+
+1. Make a room as Maya and join from another browser profile as Sam. Use the invite dialog's demo shopper links if testing on one profile. Optionally join as Priya in a third window.
+2. In Maya's window open **A little quiet / Stone** and press **Share find**. Check that the bag remains empty in every window. Now press **Add to bag**. Open **Shared bag** in both windows: it should show quantity **1**, **Picked by Maya**, and a **CAD 149.00** subtotal.
+3. As Sam, tap **+** on Stone. Both bags should show quantity **2** and **CAD 298.00** without changing picker or product page. Only Maya has the **−** and **Remove** controls. Maya can reduce it to one, then remove it. If Priya adds **Everyday carry / Navy** separately, it keeps Priya's attribution.
+4. Refresh Sam's page and reopen the bag. The last committed quantities and subtotal should match Maya's. On a phone, the drawer can be closed with **Close** or Escape. Try **Off-duty sneakers / Size 10**: you can still share the find, but can't add it.
+
+**Done looks like:** every window agrees on the exact variants, counts, picker tags and estimated subtotal. Additions and edits never navigate other shoppers. Existing bag lines keep their picker; missing or unavailable variants already in the bag are flagged. The sample catalog has reference prices, and there is no checkout in Phase 4.
+
+The existing bag table remains the projection. In `server/bag.js`, each accepted command changes it and appends an add or remove event in one transaction. Add and decrease are relative operations; full removal checks the quantity the picker saw. Retries reuse a request ID, and the event sequence orders snapshots. `client/bag.js` shows edits immediately and reconciles with the server. No migration or reset is required.
+
+## Shop now or leave feedback for later
+
+1. Make a room, share **A little quiet / Stone**, and send a message in **Chat**. Open **Comments** on Stone, leave a comment, and choose a **Your rating** score.
+2. Close that tab. Open the same invite in a different browser profile and join as a new shopper. The find, chat history, comment, and rating average are still there. Edit your own score and watch the average change while the rating count stays the same.
+3. Open **Around the room** to reach the same tabs on desktop and phone. In a find's thread, **Back to Our finds** restores the list position and button focus. Unsent drafts stay in memory when switching tabs, switching threads, or closing the panel.
+
+Chat and each exact variant's comment thread load the latest 30 messages. **Load earlier messages** pages backward without jumping the reading position; when reading above the bottom, use **New messages** to jump to the latest. Chat text, comments and ratings are retained until room expiry. Anyone admitted via the invite can read the room discussion. Emoji reactions remain separate from ratings, and all discussion leaves the bag alone.
+
+Migration `0005_discussion.sql` adds a discussion log and a current rating per room, stable find ID and shopper. The authenticated WebSocket handles paged reads, server-validated writes, and replay-safe request IDs. Writes and aggregates use one transaction; reconnect reloads the latest page and per-find summaries. **`pnpm test`** covers page boundaries, variant and room isolation, replay, expiry, live broadcasts and reading history after everyone has disconnected in the Node and Cloudflare test environments.
 
 ![Persistent finds beside independent browsing](docs/our-finds-desktop.jpg)
 
@@ -13,7 +68,7 @@ A shared shopping room for friends already on a call. **Share find** means “wo
 3. Have Sam choose **View product** on that card and share it again. It stays in the same position with **Shared by Maya**, plus a brief “Sam shared this again” note. The bag stays unchanged. Share the Stone variant separately: it is a distinct card.
 4. Have Maya and Priya share different items close together. All windows should converge on newest-first card order, based on each variant’s first share. Repeats never reorder. Scroll down the list, receive another find, and confirm the same visible card stays in place.
 5. React with ❤️ / 👎 / 🤔. A brief emoji floats near that card on devices where the panel is visible. There are no vote totals or verdicts. React to an old find after two minutes too; it still works. Reconnect never replays reaction animations.
-6. Below **1180px**, the sidebar becomes an **Our finds** button. New unique unseen variants increment its local indicator; repeats and snapshots do not. Opening is explicit. Only cards actually visible while the document is visible become seen. Refresh preserves the viewer’s seen variants when local storage is available.
+6. Above or at **1180px**, the desktop edge tab opens a popout without shifting or locking the storefront. Below **1180px**, the room control opens a modal drawer. New variants increment the local unseen indicator; repeats and snapshots do not. A new share by someone else shows a three-second notice beside the closed opener. Only cards actually visible in **Our finds** while the document is visible become seen. Refresh preserves the viewer’s seen variants when local storage is available.
 7. Open the drawer at **390px** and **320px**. Use Tab/Shift+Tab, Escape and Close. Focus stays inside while open, background scroll/interaction is blocked, and closing restores focus to the opener. **View product** closes the drawer and navigates only that shopper to the exact variant. Scroll to reach all cards on short screens.
 8. Refresh/reconnect a shopper. All current finds, including old ones, restore with the same first sharer and order. Sharing is disabled during disconnection with an explanation; browsing remains usable. A three-second per-person server cooldown spans that person’s tabs. Existing bag items from the previous version remain intact.
 
@@ -23,7 +78,7 @@ A shared shopping room for friends already on a call. **Share find** means “wo
 
 | Kept                                                                                                                                           | Extended/replaced                                                                                                                        |
 | ---------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| Create/join, six equal seats, hashed session credentials, reservations, expiry, presence, Peek/Join, independent navigation and exact variants | Replaced the timed popup/queue in `client/hold-ups.js` with stable keyed cards, local seen state and the responsive drawer               |
+| Create/join, equal seats, hashed session credentials, reservations, expiry, presence, Peek/Join, independent navigation and exact variants | Replaced the timed popup/queue in `client/hold-ups.js` with stable keyed cards, local seen state and the responsive panel               |
 | Neutral palette, Jakarta font, ASCII artwork, catalog source and browser session storage                                                       | Extended `app.js`, `index.html`, `style.css`, `mobile.css` and the existing command retry feedback                                       |
 | Node and Cloudflare hosting and realtime handlers                                                                                              | Extended `server/hold-ups.js`, `server/rooms.js`, `server.mjs`, `worker.mjs` and added migration 4                                       |
 | Existing applied SQL and historical bag/event records                                                                                          | Updated Phase 3 domain/transport tests; replaced queue tests with `tests/phase3-finds.test.mjs`; foundation setups now apply migration 4 |
@@ -32,11 +87,11 @@ The internal **hold_up** command/event identifier now means the visible **Share 
 
 Migration **0004_shared_finds.sql** adds a unique `(room_id, variant_id)` projection pointing to the first and latest share events. It backfills **all** historical shares, keeping the first event’s sharer and sequence. Repeats update only the latest event pointer; card order comes from the first event sequence. The projection is maintained in the same synchronous transaction as the share event on both runtimes. This avoids scanning every repeated share to build every snapshot. Migrations 1–3, historical events, session hashes and bag records are unchanged.
 
-New shares write **no bag rows or add_to_bag events**. Bag quantity, ownership and revision remain unchanged for first shares, repeats and reactions. The bag badge remains read-only until Phase 4; there is no pretend Add to bag control. Finds are never reconstructed from bag_lines. Room expiry removes the projection before deleting events/participants, and Cloudflare expiry deletes object storage.
+New shares write **no bag rows or add_to_bag events**. Bag quantity, ownership and revision remain unchanged for first shares, repeats and reactions. Phase 4's separate **Add to bag** control is the explicit way to add a pick. Finds are never reconstructed from bag_lines. Room expiry removes the projection before deleting events/participants, and Cloudflare expiry deletes object storage.
 
 Reconnect snapshots contain the complete **finds** collection for the room lifetime. No two-minute replay window or popup queue remains. Live notifications carry the authoritative card and ordered event; request retries reuse the same ID and cannot duplicate an event/card. Product metadata comes from the canonical server catalog, never client-submitted prices or identities.
 
-Desktop uses a 340px sticky sidebar with an independently scrolling list. Stable DOM nodes preserve focused controls. An anchor correction preserves the visible card when new variants are prepended; repeat notes reserve fixed space. Mobile reparents the same panel into a native modal dialog, with explicit boundary key handling and scroll/focus restoration. An IntersectionObserver plus viewport/document-visibility checks mark only visible cards seen. That local set is saved per room/participant in browser local storage; no server read receipts are introduced.
+Desktop uses a 440px nonmodal popout with an independently scrolling list. Stable DOM nodes preserve focused controls. An anchor correction preserves the visible card when new variants are prepended; repeat notes reserve fixed space. Mobile reparents the same panel into a native modal dialog, with explicit boundary key handling and scroll/focus restoration. An IntersectionObserver plus viewport/document-visibility checks mark only visible cards seen. That local set is saved per room/participant in browser local storage; no server read receipts are introduced.
 
 ## Verified results and limits
 
@@ -132,14 +187,14 @@ Optionally copy `.env.example` to `.env`. Empty `INVITE_SIGNING_SECRET` uses the
 
 1. In window A, open the app, select **Start a shopping room**, optionally name it, enter **Maya**, choose an avatar and select **Make room**. Expect one connected person and the “You're the first one here” message.
 2. Select **Invite your people**, then **Testing on one browser?** Open **demo shopper 1** and **demo shopper 2** in separate tabs/windows. These use separate demo session-storage keys, so one browser can represent three people. On separate devices or browser profiles, use the ordinary invite instead.
-3. In B join as **Maya** with Clay; in C join as **Priya** with Lilac. Expect **Maya**, **Maya 2**, and **Priya**, the chosen avatars, and **3 / 6 seats** in every window. No one is a host or leader.
+3. In B join as **Maya** with Clay; in C join as **Priya** with Lilac. Expect **Maya**, **Maya 2**, and **Priya**, the chosen avatars, and **3 / 10 seats** in every window. No one is a host or leader.
 4. Refresh B. Expect **Maya 2 (you)** and still three seats. Normal tabs on the same browser share the same saved identity; they are not new participants.
 5. Temporarily stop the server. Every window should retain its visible room and show **Reconnecting…**. Restart using the same data directory/key. Each window should reconnect automatically, receive a complete current snapshot, and retain its identity. **Retry now** retries immediately.
 6. To test seats, navigate a demo tab away and back, or temporarily disconnect a real device. Its seat stays reserved for ten minutes after the final connection is lost. A silent network failure is detected after the heartbeat timeout. Returning during the reservation restores the person; after release, a valid old identity can return only if there is space. Demo identities persist across refresh/back navigation, but closing the demo tab ends its session storage; normal identities persist in local storage.
-7. To test the limit, use six separate browser profiles/devices, or distinct `guest` values in the invite URL to create six demo identities. A seventh gets the full-room screen. Existing seated members can still refresh a full room. Reserved disconnected seats count toward six.
+7. To test the limit, use ten separate browser profiles/devices, or distinct `guest` values in the invite URL to create ten demo identities. An eleventh gets the full-room screen. Existing seated members can still refresh a full room. Reserved disconnected seats count toward ten. The six avatars can be reused.
 8. Open `/?room=invalid` to see the invalid-link screen. To test expiry quickly, use a **separate test data directory** with `ROOM_TTL_MS=10000`; leave it untouched for ten seconds, then retry the invite. Expect the expired-room screen. Do not use a short TTL on a database whose rooms you want to keep.
 
-**Done looks like:** three distinct identities appear consistently, refresh never duplicates them, reconnect restores the current room, and simultaneous attempts cannot exceed six seats.
+**Done looks like:** three distinct identities appear consistently, refresh never duplicates them, reconnect restores the current room, and simultaneous attempts cannot exceed ten seats.
 
 ## Automated verification
 
@@ -155,10 +210,10 @@ Room foundation acceptance results, retained in this build:
 
 | Check                                       | Result                                                                                             |
 | ------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| Simultaneous joins with five occupied seats | Exactly one accepted, one refused; six persisted, on both backends                                 |
+| Simultaneous joins with nine occupied seats | Exactly one accepted, one refused; ten persisted, on both backends                                 |
 | Valid/invalid session tokens                | Same person restored / invalid rejected without a room snapshot                                    |
 | Duplicate names, Unicode, unsafe input      | Numbered names preserved; HTML/control characters rejected                                         |
-| Six seats and reserved-seat readmission     | Enforced; released identity refused when room has filled                                           |
+| Ten seats and reserved-seat readmission     | Enforced; released identity refused when room has filled                                           |
 | Multiple tabs for one identity              | One person; closing one connection does not disconnect the other                                   |
 | Inactivity and cleanup                      | Heartbeats do not extend expiry; participant/connection rows deleted; expired invites stay expired |
 | Actual Cloudflare-runtime expiry            | Expired responses remain HTTP 410 after storage deletion                                           |
@@ -178,7 +233,7 @@ The Node adapter uses built-in `node:sqlite`, the same SQL schema, and `BEGIN IM
 
 Migrations: [`0001_rooms.sql`](drizzle/room-object/0001_rooms.sql), [`0002_presence.sql`](drizzle/room-object/0002_presence.sql), [`0003_hold_ups.sql`](drizzle/room-object/0003_hold_ups.sql) and [`0004_shared_finds.sql`](drizzle/room-object/0004_shared_finds.sql). They run at Node startup / object initialization and record schema versions 1–4. Version 2 adds the shared event log and a separate connection activity timestamp. Version 3 adds the bag projection and a room/event index. Version 4 adds/backfills persistent shared finds without changing old bags, events or token hashes. Future changes need new migrations, not edits to an applied version. `wrangler.jsonc` also declares the `v1-rooms` SQLite class migration. Original D1 SQL files/journal remain unchanged for the legacy deployment.
 
-Room activity means creation, a new join, or a throttled actual interaction in the room. Heartbeats, reconnect attempts, snapshots and avatar connection updates do not keep an abandoned room alive. Room expiry deletes application records; Durable Object expiry also deletes the object's storage. No expired participant/event archive or identity-bearing tombstone is retained. The `events` table stores append-only `view`, `hold_up` (Share find), and `react` events, alongside historical `add_to_bag` events with room/user/product/variant IDs, canonical JSON payloads and server timestamps. Presence is derived from each participant’s latest view. All shared-find rows, bag lines and events are deleted with the room.
+Room activity means creation, a new join, or a real interaction in the room. Heartbeats, reconnect attempts, snapshots and avatar connection updates do not keep an abandoned room alive. Room expiry deletes application records; Durable Object expiry also deletes the object's storage. No expired participant/event archive or identity-bearing tombstone is retained. The `events` table stores append-only `view`, `hold_up` (Share find), `react`, `add_to_bag` and `remove_from_bag` events with room/user/product/variant IDs, canonical JSON payloads and server timestamps. Presence is derived from each participant’s latest view. All shared-find rows, bag lines and events are deleted with the room.
 
 A valid signed invitation to an absent room produces **expired**; a forged/malformed invitation produces **invalid**. This distinction needs no expired-user records. Node performs periodic cleanup; Durable Objects use alarms. Access is denied at the expiry deadline even if background cleanup runs slightly later.
 
@@ -256,13 +311,11 @@ Why Durable Objects rather than Supabase: one authoritative room object naturall
 
 ## Shopify and later phases
 
-Phase 3 displays the clearly labelled sample catalog. Presence, Peek/Join, nearby avatars, Share find, the persistent Our finds sidebar/drawer and floating reactions are implemented. Sharing never adds to the bag. Bag editing, live Shopify checkout and recap remain later phases. Sound remains absent/muted.
-
-`catalog.mjs`, the reusable Shopify client and legacy storefront domain source are retained. The client now requires an explicit API version; the application config reads all four Shopify values from the environment. The public Hydrogen store can be configured using the public example credentials in [Shopify's official Hydrogen documentation](https://shopify.dev/docs/api/hydrogen/2026-04); they are not embedded in application code. Live catalog caching, country-context pricing, cart warnings and checkout will be wired and verified in Phase 5.
+See the Phase 5 setup above for hosted checkout. Coshop doesn't collect payment details or split payments. Shopify owns the checkout page. The sample catalog remains available when Shopify isn't configured.
 
 Legacy `room-domain.mjs`, `scripts/benchmark.mjs`, `scripts/verify-shopify.mjs`, their reports, and the three old domain/room/worker test files describe the previous API. They are retained for reference, are not imported by the current server, and are not part of the current test command. Do not use their historical results as proof of this version. The legacy verifier now reads credentials from environment variables. The original D1 migrations and old screenshots are unchanged.
 
-Phase 6 will distinguish a verified server-side Shopify order from an explicitly labelled simulated demo completion. Returning from checkout will not count as proof of a purchase. That work is deferred until its phase is approved.
+See Phase 6 above for the difference between simulated and verified paid recaps.
 
 ## Phase 1 foundation file handoff
 

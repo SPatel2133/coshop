@@ -9,8 +9,8 @@ for (const worker of [false, true])
     async (t) => {
       const { base } = await launch(t, worker, {
         TEST_PORT: worker ? "14297" : "14296",
-        ROOM_TTL_MS: "1800",
-        SEAT_RESERVATION_MS: "250",
+        ROOM_TTL_MS: "3000",
+        SEAT_RESERVATION_MS: "900",
         HEARTBEAT_INTERVAL_MS: "100",
         HEARTBEAT_TIMEOUT_MS: "400",
       });
@@ -24,13 +24,23 @@ for (const worker of [false, true])
       t.after(() => original.ws.terminate());
       await original.wait((m) => m.type === "state");
       original.ws.close();
-      await delay(400);
+      await delay(1050);
+      for (let n = 0; n < 10; n++)
+        assert.equal(
+          (await api(base, path + "/join", { name: "Friend", avatar: "sage" }))
+            .status,
+          201,
+        );
+      const blocked = await api(base, path + "/session", {}, room.token);
+      assert.equal(blocked.status, 409);
+      assert.equal(blocked.data.code, "ROOM_FULL");
+      await delay(1050);
       const reclaimed = await api(base, path + "/session", {}, room.token);
       assert.equal(reclaimed.status, 200);
       assert.equal(reclaimed.data.me, room.me);
       assert.equal(reclaimed.data.room.participants.length, 1);
       // No join/activity occurs. Authentication/heartbeats must not extend expiry.
-      await delay(1800);
+      await delay(3000);
       const expired = await api(base, path + "/session", {}, room.token);
       assert.equal(expired.status, 410);
       assert.equal(expired.data.code, "ROOM_EXPIRED");
@@ -133,23 +143,47 @@ for (const worker of [false, true])
         badSocket.messages.some((m) => m.type === "state"),
         false,
       );
-      for (let n = 0; n < 2; n++)
+      for (let n = 0; n < 6; n++)
         assert.equal(
           (await api(base, path + "/join", { name: "Sam", avatar: "sky" }))
             .status,
           201,
         );
-      // Five seats exist. Exactly one of these concurrent requests may commit.
+      assert.deepEqual((await api(base, path)).data, {
+        name: "Whatever catches our eye",
+        full: false,
+        capacity: 10,
+      });
       const race = await Promise.all([
         api(base, path + "/join", { name: "Race A", avatar: "rose" }),
         api(base, path + "/join", { name: "Race B", avatar: "butter" }),
       ]);
       assert.deepEqual(race.map((r) => r.status).sort(), [201, 409]);
-      const final = await api(base, path + "/session", {}, first.token);
-      assert.equal(final.data.room.participants.length, 6);
       assert.equal(
-        (await api(base, path + "/join", { name: "Seventh", avatar: "sky" }))
-          .data.code,
+        race.find((result) => result.status === 409).data.code,
+        "ROOM_FULL",
+      );
+      const final = await api(base, path + "/session", {}, first.token);
+      assert.equal(final.data.room.capacity, 10);
+      assert.equal(final.data.room.participants.length, 10);
+      assert.equal((await api(base, path)).data.full, true);
+      reconnected.ws.close();
+      await s1.wait(
+        (m) =>
+          m.type === "state" &&
+          m.room.participants.length === 10 &&
+          m.room.participants.some(
+            (p) => p.id === second.data.me && !p.connected,
+          ),
+      );
+      const fullRejoin = socket(base, first.invite, second.data.token);
+      t.after(() => fullRejoin.ws.terminate());
+      const fullState = await fullRejoin.wait((m) => m.type === "state");
+      assert.equal(fullState.me, second.data.me);
+      assert.equal(fullState.room.participants.length, 10);
+      assert.equal(
+        (await api(base, path + "/join", { name: "Extra", avatar: "sky" })).data
+          .code,
         "ROOM_FULL",
       );
       assert.equal(

@@ -14,6 +14,10 @@ import {
 } from "./server/security.js";
 import { nodeStore, migrate } from "./server/storage.js";
 import { Rooms, roomHttp, json } from "./server/rooms.js";
+import { Storefront } from "./server/storefront.js";
+import { readPaidWebhook } from "./server/order-webhook.js";
+import { catalog } from "./catalog.mjs";
+import { discussionFor, isDiscussion } from "./server/discussion.js";
 import { consume, rateKey } from "./server/abuse.js";
 import {
   parseMessage,
@@ -80,7 +84,29 @@ migrate(
   ),
   4,
 );
-const rooms = new Rooms(store, config),
+migrate(
+  store,
+  await readFile(
+    new URL("drizzle/room-object/0005_discussion.sql", root),
+    "utf8",
+  ),
+  5,
+);
+migrate(
+  store,
+  await readFile(
+    new URL("drizzle/room-object/0006_storefront.sql", root),
+    "utf8",
+  ),
+  6,
+);
+const storefront = new Storefront(config.shopify);
+migrate(
+  store,
+  await readFile(new URL("drizzle/room-object/0007_haul.sql", root), "utf8"),
+  7,
+);
+const rooms = new Rooms(store, config, Date.now, catalog, storefront, true),
   clients = new Map();
 const wsServer = new WebSocketServer({ noServer: true, maxPayload: 2048 });
 const assets = new Map([
@@ -90,7 +116,16 @@ const assets = new Map([
   ["/mobile.css", ["mobile.css", "text/css"]],
   ["/font.woff2", ["font.woff2", "font/woff2"]],
   ["/catalog.mjs", ["catalog.mjs", "text/javascript"]],
-  ...["rooms", "session", "realtime", "presence", "hold-ups"].map((n) => [
+  ...[
+    "rooms",
+    "session",
+    "realtime",
+    "presence",
+    "hold-ups",
+    "discussion",
+    "bag",
+    "haul",
+  ].map((n) => [
     "/client/" + n + ".js",
     ["client/" + n + ".js", "text/javascript"],
   ]),
@@ -127,6 +162,7 @@ async function limit(ip, kind) {
   consume(store, await rateKey(config, ip, kind));
 }
 const server = http.createServer(async (req, res) => {
+  let roomId, action;
   try {
     const url = nodeRequestUrl(req, config.publicOrigin),
       headers = new Headers();
@@ -151,30 +187,32 @@ const server = http.createServer(async (req, res) => {
       res.end(await readFile(new URL(path, root)));
       return;
     }
-    let response, roomId;
-    if (url.pathname === "/api/rooms" && req.method === "POST") {
+    let response;
+    if (url.pathname === "/api/shopify/orders-paid") {
+      const order = await readPaidWebhook(request, config);
+      if (order && (await rooms.haul.paid(order))) roomId = order.room;
+      response = json({ received: true });
+    } else if (url.pathname === "/api/rooms" && req.method === "POST") {
       await limit(req.socket.remoteAddress || "unknown", "create");
       roomId = crypto.randomUUID();
       response = await roomHttp(rooms, roomId, "create", request, config);
     } else {
       const match = url.pathname.match(
-        /^\/api\/rooms\/([^/]+)(?:\/(join|session))?$/,
+        /^\/api\/rooms\/([^/]+)(?:\/(join|session|catalog|checkout|checkout-release|haul-demo))?$/,
       );
       if (!match) throw new RoomError("NOT_FOUND", "Page not found.", 404);
       await limit(req.socket.remoteAddress || "unknown", "join");
       roomId = await verifyInvite(config.secret, match[1]);
-      response = await roomHttp(
-        rooms,
-        roomId,
-        match[2] || "info",
-        request,
-        config,
+      action = match[2] || "info";
+      response = await roomHttp(rooms, roomId, action, request, config, () =>
+        broadcast(roomId),
       );
     }
     if (roomId) broadcast(roomId);
     res.writeHead(response.status, Object.fromEntries(response.headers));
     res.end(await response.text());
   } catch (error) {
+    if (roomId && action === "checkout") broadcast(roomId);
     const response = fail(error);
     res.writeHead(response.status, Object.fromEntries(response.headers));
     res.end(await response.text());
@@ -261,7 +299,12 @@ server.on("upgrade", async (req, socket, head) => {
             );
             if (ack.accepted) broadcast(roomId, true);
             ws.send(JSON.stringify(ack));
-          } else if (message.type === "hold_up" || message.type === "react") {
+          } else if (
+            message.type === "hold_up" ||
+            message.type === "react" ||
+            message.type === "bag_change" ||
+            isDiscussion(message.type)
+          ) {
             const result = rooms.shopCommand(roomId, c.id, message);
             if (result.notification) {
               for (const [peer, member] of clients)
@@ -270,7 +313,11 @@ server.on("upgrade", async (req, socket, head) => {
                   member.person &&
                   peer.readyState === 1
                 )
-                  peer.send(JSON.stringify(result.notification));
+                  peer.send(
+                    JSON.stringify(
+                      discussionFor(result.notification, member.person),
+                    ),
+                  );
               broadcast(roomId, true);
             }
             ws.send(JSON.stringify(result.ack));
@@ -302,15 +349,17 @@ server.on("upgrade", async (req, socket, head) => {
 const sweep = setInterval(
   () => {
     for (const room of store.all("SELECT id FROM room_records")) {
+      let checkoutExpired = false;
       try {
         const result = rooms.sweep(room.id);
+        checkoutExpired = result.checkoutExpired;
         for (const [ws, c] of clients)
           if (result.stale.includes(c.id))
             ws.close(4000, "Heartbeat timed out");
       } catch (e) {
         if (e.code !== "ROOM_EXPIRED") console.error("Room cleanup failed");
       }
-      broadcast(room.id, true);
+      broadcast(room.id, !checkoutExpired);
     }
     store.run("DELETE FROM abuse_windows WHERE expires_at<=?", Date.now());
   },
@@ -320,8 +369,7 @@ sweep.unref();
 server.listen(
   Number(process.env.PORT || 4193),
   process.env.HOST || "0.0.0.0",
-  () =>
-    console.log("coshop Phase 3: http://localhost:" + server.address().port),
+  () => console.log("coshop: http://localhost:" + server.address().port),
 );
 function shutdown() {
   clearInterval(sweep);

@@ -76,29 +76,7 @@ export class HoldUps {
         };
       });
   }
-  bag(room) {
-    const items = this.store
-      .all(
-        "SELECT * FROM bag_lines WHERE room_id=? ORDER BY created_at,variant_id",
-        room,
-      )
-      .map((row) => ({
-        productId: row.product_id,
-        variantId: row.variant_id,
-        quantity: row.quantity,
-        pickedBy: this.person(row.picked_by),
-      }));
-    const revision = this.store.all(
-      "SELECT COALESCE(MAX(sequence),0) AS revision FROM events WHERE room_id=? AND type IN ('add_to_bag','remove_from_bag')",
-      room,
-    )[0].revision;
-    return {
-      revision,
-      items,
-      totalQuantity: items.reduce((n, item) => n + item.quantity, 0),
-    };
-  }
-  append(room, user, message, now) {
+  append(room, user, message, now, products = this.products) {
     const { type, requestId } = message;
     if (
       !["hold_up", "react"].includes(type) ||
@@ -172,7 +150,7 @@ export class HoldUps {
         ),
       };
     }
-    const product = this.products.find((p) => p.id === message.productId);
+    const product = products.find((p) => p.id === message.productId);
     const variant = product?.variants.find((v) => v.id === message.variantId);
     if (!variant)
       throw new RoomError(
@@ -195,7 +173,7 @@ export class HoldUps {
         productId: product.id,
         variantId: variant.id,
         name: product.name,
-        image: product.image,
+        image: variant.image || product.image,
         variant: variant.title,
         cents: variant.cents,
         currency: variant.currency,

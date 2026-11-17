@@ -1,4 +1,5 @@
 import { $, make } from "./rooms.js";
+import { DiscussionUI } from "./discussion.js";
 
 // Local seen state is per viewer, keyed by variant, and never sent to the server.
 export class FindsState {
@@ -39,23 +40,36 @@ export class FindsUI {
     Object.assign(this, { command, view, error });
     this.nodes = new Map();
     this.reactions = new Set();
-    this.bagRevision = -1;
     this.panel = $("finds-panel");
     this.list = $("finds-list");
     this.drawer = $("finds-drawer");
+    this.desktop = $("finds-desktop");
+    this.opener = $("open-finds");
+    this.alert = $("finds-alert");
     this.wide = matchMedia("(min-width: 1180px)");
     this.wide.addEventListener("change", () => this.placePanel());
-    $("open-finds").onclick = () => this.openDrawer();
-    $("close-finds").onclick = () => this.closeDrawer();
+    this.opener.onclick = () =>
+      this.open ? this.closePanel() : this.openPanel();
+    $("close-finds").onclick = () => this.closePanel();
+    this.desktop.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && this.open) {
+        event.preventDefault();
+        this.closePanel();
+      }
+    });
+    this.panel.addEventListener("transitionend", (event) => {
+      if (event.target === this.panel && event.propertyName === "transform")
+        this.checkVisible();
+    });
     this.drawer.addEventListener("cancel", (event) => {
       event.preventDefault();
-      this.closeDrawer();
+      this.closePanel();
     });
     this.drawer.addEventListener("keydown", (event) => {
       if (event.key !== "Tab" || !this.drawer.open) return;
       const controls = [
         ...this.drawer.querySelectorAll(
-          "button:not([disabled]), [tabindex='0']",
+          "button:not([disabled]):not([tabindex='-1']), textarea:not([disabled]), [tabindex='0']",
         ),
       ].filter((node) => node.getClientRects().length > 0);
       const first = controls[0],
@@ -68,91 +82,96 @@ export class FindsUI {
         (event.shiftKey ? last : first)?.focus();
       }
     });
-    this.drawer.addEventListener("close", () => {
-      this.finishDrawer();
-    });
     this.observer = new IntersectionObserver(() => this.checkVisible(), {
       root: this.list,
       threshold: [0.5],
     });
     document.addEventListener("visibilitychange", () => this.checkVisible());
-    document.addEventListener(
-      "scroll",
-      () => {
-        this.sizePanel();
-        this.checkVisible();
-      },
-      {
-        passive: true,
-      },
-    );
-    addEventListener("resize", () => this.sizePanel());
+    document.addEventListener("scroll", () => this.checkVisible(), {
+      passive: true,
+    });
+    addEventListener("resize", () => this.checkVisible());
     this.list.addEventListener("scroll", () => this.checkVisible(), {
       passive: true,
     });
-    this.stripObserver = new ResizeObserver((entries) => {
-      document.documentElement.style.setProperty(
-        "--presence-height",
-        entries[0].contentRect.height + 36 + "px",
-      );
-      this.sizePanel();
+    this.discussion = new DiscussionUI({
+      command,
+      isOpen: () => Boolean(this.open),
+      onFindsVisible: () => this.checkVisible(),
     });
-    this.stripObserver.observe(document.querySelector(".presence-strip"));
     this.placePanel();
     this.ticker = setInterval(() => this.updateButton(), 200);
   }
   placePanel() {
-    if (this.wide.matches && this.drawer.open) this.closeDrawer(false);
-    const host = this.wide.matches ? $("finds-desktop") : this.drawer;
-    if (this.panel.parentElement !== host) host.append(this.panel);
-    this.sizePanel();
+    const host = this.wide.matches ? this.desktop : this.drawer;
+    if (this.wide.matches) this.opener.removeAttribute("aria-haspopup");
+    else this.opener.setAttribute("aria-haspopup", "dialog");
+    if (this.panel.parentElement === host) return;
+    const wasOpen = this.open;
+    const active = this.panel.contains(document.activeElement)
+      ? document.activeElement
+      : null;
+    if (wasOpen) this.closePanel(false);
+    host.append(this.panel);
+    if (wasOpen) this.openPanel(active);
+  }
+  openPanel(focus = null) {
+    if (this.open) return;
+    this.clearAlert();
+    this.open = true;
+    this.opener.setAttribute("aria-expanded", "true");
+    if (this.wide.matches) this.setDesktop(true);
+    else {
+      this.pageTop = scrollY;
+      document.body.style.setProperty(
+        "--drawer-scroll-top",
+        -this.pageTop + "px",
+      );
+      document.documentElement.classList.add("finds-modal-open");
+      this.drawer.showModal();
+    }
+    this.discussion.restoreAnchor(this.list, this.listAnchor);
+    this.discussion.reveal();
+    (focus || $("close-finds")).focus({ preventScroll: true });
     this.checkVisible();
   }
-  sizePanel() {
-    if (!this.wide.matches || $("room").hidden) return;
-    const host = $("finds-desktop");
-    const height = Math.max(
-      240,
-      Math.floor(
-        innerHeight - Math.max(0, host.getBoundingClientRect().top) - 16,
-      ),
-    );
-    if (host.style.height !== height + "px") host.style.height = height + "px";
-  }
-  openDrawer() {
-    if (this.wide.matches || this.drawer.open) return;
-    this.pageTop = scrollY;
-    this.restoreFocus = true;
-    this.locked = true;
-    document.body.style.setProperty(
-      "--drawer-scroll-top",
-      -this.pageTop + "px",
-    );
-    document.documentElement.classList.add("finds-modal-open");
-    this.drawer.showModal();
-    this.checkVisible();
-  }
-  closeDrawer(restore = true) {
-    this.restoreFocus = restore;
+  closePanel(restore = true) {
+    if (!this.open) return;
+    this.discussion.remember();
+    this.discussion.collapseQuick();
+    if (!$("finds-content").hidden)
+      this.listAnchor = this.discussion.anchor(this.list, this.list);
+    this.open = false;
+    this.opener.setAttribute("aria-expanded", "false");
     if (this.drawer.open) {
       this.drawer.close();
-      this.finishDrawer();
+      document.documentElement.classList.remove("finds-modal-open");
+      document.body.style.removeProperty("--drawer-scroll-top");
+      scrollTo({ top: this.pageTop, left: 0, behavior: "instant" });
     }
+    if (restore) this.opener.focus({ preventScroll: true });
+    this.setDesktop(false);
   }
-  finishDrawer() {
-    if (!this.locked) return;
-    this.locked = false;
-    document.documentElement.classList.remove("finds-modal-open");
-    document.body.style.removeProperty("--drawer-scroll-top");
-    scrollTo({ top: this.pageTop || 0, left: 0, behavior: "instant" });
-    if (this.restoreFocus && !this.wide.matches)
-      $("open-finds").focus({ preventScroll: true });
+  setDesktop(open) {
+    this.desktop.inert = !open;
+    this.desktop.setAttribute("aria-hidden", String(!open));
+    $("room").classList.toggle("finds-popout-open", open);
+  }
+  clearAlert() {
+    clearTimeout(this.alertTimer);
+    this.alert.textContent = "";
+  }
+  announceShare(name) {
+    this.clearAlert();
+    this.alert.textContent = name + " shared a find.";
+    this.alertTimer = setTimeout(() => this.clearAlert(), 3000);
   }
   isVisible() {
     return (
       !document.hidden &&
       !$("room").hidden &&
-      (this.wide.matches || this.drawer.open)
+      !$("finds-content").hidden &&
+      this.open
     );
   }
   checkVisible() {
@@ -165,6 +184,8 @@ export class FindsUI {
       this.state.markSeen(
         id,
         rect.height > 0 &&
+          rect.left >= 0 &&
+          rect.right <= innerWidth + 1 &&
           Math.max(
             0,
             Math.min(rect.bottom, bottom) - Math.max(rect.top, top),
@@ -178,7 +199,10 @@ export class FindsUI {
     const key = "coshop:seen-finds:" + room.id + ":" + me;
     if (key === this.key) return;
     this.key = key;
-    this.bagRevision = -1;
+    this.me = me;
+    this.closePanel(false);
+    this.clearAlert();
+    this.listAnchor = null;
     this.cooldownUntil = 0;
     this.successUntil = 0;
     let seen = [];
@@ -195,10 +219,10 @@ export class FindsUI {
     for (const node of this.nodes.values()) this.observer.unobserve(node);
     this.nodes.clear();
     this.list.replaceChildren();
+    this.discussion.reset();
   }
   snapshot(room, me) {
     this.setIdentity(room, me);
-    this.setBag(room.bag);
     this.state.snapshot(room.finds);
     this.render();
     const mine = room.finds
@@ -216,25 +240,27 @@ export class FindsUI {
     this.updateButton();
   }
   message(message) {
-    this.setBag(message.bag);
+    if (message.type === "discussion") {
+      this.discussion.message(message);
+      return;
+    }
     if (message.type === "hold_up") {
+      const { event, find } = message;
+      const isNew = !this.state.cards.has(find.variantId) && !event.repeated;
       const changed = this.state.merge(message.find);
-      if (changed)
+      if (changed) {
         this.render(
           message.find.variantId,
           message.event.repeated ? message.event.by.name : null,
         );
+        if (isNew && !this.open && event.by.id !== this.me)
+          this.announceShare(event.by.name);
+      }
     } else this.float(message.event);
-  }
-  setBag(bag) {
-    if (!bag || bag.revision <= this.bagRevision) return;
-    this.bagRevision = bag.revision;
-    $("bag-count").textContent = "Shared bag · " + bag.totalQuantity;
-    $("bag-count").title =
-      "Sharing never adds to the bag. Existing saved items are kept; bag editing arrives in Phase 4.";
   }
   setConnected(online) {
     this.online = online;
+    this.discussion.setConnected(online);
     this.updateButton();
     for (const node of this.nodes.values())
       for (const button of node.querySelectorAll("[data-reaction]"))
@@ -245,7 +271,8 @@ export class FindsUI {
   }
   deactivate() {
     this.setConnected(false);
-    this.closeDrawer(false);
+    this.closePanel(false);
+    this.clearAlert();
   }
   attachButton(button, note, product, variant) {
     this.button = button;
@@ -262,7 +289,6 @@ export class FindsUI {
           productId: product.id,
           variantId: chosen,
         });
-        this.setBag(ack.bag);
         if (this.state.merge(ack.find)) this.render(ack.find.variantId);
         this.cooldownUntil = Date.now() + 3000;
         if (this.buttonContext === context && variant() === chosen)
@@ -312,7 +338,7 @@ export class FindsUI {
     $("finds-count").textContent = String(this.state?.cards.size || 0);
     $("open-finds").setAttribute(
       "aria-label",
-      "Our finds" + (count ? ", " + count + " unseen" : ""),
+      "Around the room" + (count ? ", " + count + " unseen" : ""),
     );
   }
   card(find) {
@@ -359,7 +385,7 @@ export class FindsUI {
     const view = make("button", "View product", "find-view");
     view.type = "button";
     view.onclick = () => {
-      this.closeDrawer(false);
+      if (!this.wide.matches) this.closePanel(false);
       this.view(find.productId, find.variantId);
     };
     actions.append(reactions, view);
@@ -367,11 +393,12 @@ export class FindsUI {
       floats = make("div", undefined, "find-floats");
     floats.setAttribute("aria-live", "polite");
     node.append(image, copy, warning, by, actions, again, floats);
+    node.dataset.find = find.id;
+    this.discussion.controls(find, node);
     node.parts = { image, heading, variant, price, warning, by, again, floats };
     return node;
   }
   render(highlight, repeatedBy) {
-    this.sizePanel();
     const bounds = this.list.getBoundingClientRect();
     const anchor =
       this.list.scrollTop > 0
@@ -384,6 +411,9 @@ export class FindsUI {
     for (const [id, node] of this.nodes)
       if (!this.state.cards.has(id)) {
         this.observer.unobserve(node);
+        if (this.discussion.quick?.card.id === node.dataset.find)
+          this.discussion.collapseQuick();
+        this.discussion.cards.delete(node.dataset.find);
         node.remove();
         this.nodes.delete(id);
       }
@@ -398,7 +428,9 @@ export class FindsUI {
       if (node !== next) this.list.insertBefore(node, next);
       next = node.nextElementSibling;
       const p = node.parts;
-      if (p.image.getAttribute("src") !== find.image) p.image.src = find.image;
+      p.image.hidden = !find.image;
+      if (find.image && p.image.getAttribute("src") !== find.image)
+        p.image.src = find.image;
       p.heading.textContent = find.name;
       p.variant.textContent = find.variant;
       p.price.textContent = new Intl.NumberFormat("en-CA", {
@@ -408,7 +440,7 @@ export class FindsUI {
       }).format(find.cents / 100);
       p.warning.hidden = find.available !== false;
       p.warning.textContent =
-        find.available === false ? "Unavailable in the sample catalog" : "";
+        find.available === false ? "Unavailable when shared" : "";
       if (find.variantId === highlight) {
         clearTimeout(node.highlightTimer);
         node.classList.add("find-highlight");

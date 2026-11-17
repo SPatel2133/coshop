@@ -124,7 +124,11 @@ export class RoomConnection {
           this.flushView();
           this.flushCommands();
         }
-      } else if (message.type === "hold_up" || message.type === "reaction")
+      } else if (
+        ["hold_up", "reaction", "discussion", "bag_changed"].includes(
+          message.type,
+        )
+      )
         this.onShopping(message);
       else if (message.type === "command_ack") {
         const pending = this.commands.get(message.requestId);
@@ -190,12 +194,23 @@ export class RoomConnection {
     }
     return false;
   }
-  command(type, payload) {
+  command(type, payload, requestId = navigationId()) {
     if (!this.ready || this.stopped)
-      return Promise.reject(new Error("Reconnect before sharing a find."));
-    if (!["hold_up", "react"].includes(type))
+      return Promise.reject(new Error("Reconnect before trying again."));
+    if (
+      ![
+        "hold_up",
+        "react",
+        "bag_change",
+        "chat_post",
+        "comment_post",
+        "rate_find",
+        "discussion_history",
+        "discussion_summary",
+      ].includes(type)
+    )
       return Promise.reject(new Error("Unsupported shopping action."));
-    const message = { ...payload, type, requestId: navigationId() };
+    const message = { ...payload, type, requestId };
     return new Promise((resolve, reject) => {
       const pending = { message, resolve, reject, expires: Date.now() + 15000 };
       this.commands.set(message.requestId, pending);
@@ -207,8 +222,11 @@ export class RoomConnection {
     if (Date.now() >= pending.expires) {
       this.commands.delete(pending.message.requestId);
       pending.reject(
-        new Error(
-          "Couldn’t confirm that action. Reconnect and check Our finds, then retry if it’s missing.",
+        Object.assign(
+          new Error(
+            "Couldn’t confirm that action. Check the room and try again.",
+          ),
+          { code: "COMMAND_TIMEOUT" },
         ),
       );
       return;

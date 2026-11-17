@@ -47,6 +47,7 @@ export function configuration(env = {}) {
       token: env.SHOPIFY_STOREFRONT_TOKEN || "",
       apiVersion: env.SHOPIFY_API_VERSION || "",
       country: env.SHOPIFY_BUYER_COUNTRY || "",
+      webhookSecret: env.SHOPIFY_WEBHOOK_SECRET || "",
     },
   };
 }

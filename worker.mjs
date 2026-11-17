@@ -3,10 +3,17 @@ import schema from "./drizzle/room-object/0001_rooms.sql";
 import presenceSchema from "./drizzle/room-object/0002_presence.sql";
 import holdUpSchema from "./drizzle/room-object/0003_hold_ups.sql";
 import findsSchema from "./drizzle/room-object/0004_shared_finds.sql";
+import discussionSchema from "./drizzle/room-object/0005_discussion.sql";
+import storefrontSchema from "./drizzle/room-object/0006_storefront.sql";
+import haulSchema from "./drizzle/room-object/0007_haul.sql";
 import { configuration, RoomError } from "./server/config.js";
 import { verifyInvite, tokenHash, sameOrigin } from "./server/security.js";
 import { objectStore, migrate } from "./server/storage.js";
 import { Rooms, roomHttp, json } from "./server/rooms.js";
+import { Storefront } from "./server/storefront.js";
+import { readPaidWebhook } from "./server/order-webhook.js";
+import { catalog } from "./catalog.mjs";
+import { discussionFor, isDiscussion } from "./server/discussion.js";
 import { rateKey, consume } from "./server/abuse.js";
 import {
   errorMessage,
@@ -30,8 +37,18 @@ export class RoomObject extends DurableObject {
       migrate(this.store, presenceSchema, 2);
       migrate(this.store, holdUpSchema, 3);
       migrate(this.store, findsSchema, 4);
+      migrate(this.store, discussionSchema, 5);
+      migrate(this.store, storefrontSchema, 6);
+      migrate(this.store, haulSchema, 7);
     });
-    this.rooms = new Rooms(this.store, this.config);
+    this.rooms = new Rooms(
+      this.store,
+      this.config,
+      Date.now,
+      catalog,
+      new Storefront(this.config.shopify),
+      true,
+    );
     this.presenceCache = new Map();
   }
   id() {
@@ -90,10 +107,19 @@ export class RoomObject extends DurableObject {
           410,
         ),
       );
+    const url = new URL(request.url),
+      id = request.headers.get("x-room-id");
     try {
-      const url = new URL(request.url),
-        id = request.headers.get("x-room-id");
       if (!id) throw new RoomError("INVALID_LINK", "Invalid invite.", 404);
+      if (url.pathname === "/internal/paid") {
+        const order = await request.json();
+        if (order.room !== id) return json({ received: true });
+        if (await this.rooms.haul.paid(order)) {
+          this.broadcast(id);
+          await this.schedule(id);
+        }
+        return json({ received: true });
+      }
       if (url.pathname === "/socket") {
         this.rooms.require(id);
         const [client, server] = Object.values(new WebSocketPair());
@@ -116,12 +142,20 @@ export class RoomObject extends DurableObject {
         url.pathname.slice(1),
         request,
         this.config,
+        async () => {
+          this.broadcast(id);
+          await this.schedule(id);
+        },
       );
       this.broadcast(id);
       await this.schedule(id);
       return response;
     } catch (error) {
       if (error.code === "ROOM_EXPIRED" || !this.id()) await this.erase();
+      else if (url.pathname === "/checkout") {
+        this.broadcast(id);
+        await this.schedule(id);
+      }
       return failure(error);
     }
   }
@@ -180,12 +214,21 @@ export class RoomObject extends DurableObject {
         if (ack.accepted) this.broadcast(c.roomId, true);
         ws.send(JSON.stringify(ack));
         ws.serializeAttachment(c);
-      } else if (message.type === "hold_up" || message.type === "react") {
+      } else if (
+        message.type === "hold_up" ||
+        message.type === "react" ||
+        message.type === "bag_change" ||
+        isDiscussion(message.type)
+      ) {
         const result = this.rooms.shopCommand(c.roomId, c.id, message);
         if (result.notification) {
-          for (const peer of this.ctx.getWebSockets())
-            if (peer.deserializeAttachment()?.person && peer.readyState === 1)
-              peer.send(JSON.stringify(result.notification));
+          for (const peer of this.ctx.getWebSockets()) {
+            const person = peer.deserializeAttachment()?.person;
+            if (person && peer.readyState === 1)
+              peer.send(
+                JSON.stringify(discussionFor(result.notification, person)),
+              );
+          }
           this.broadcast(c.roomId, true);
         }
         ws.send(JSON.stringify(result.ack));
@@ -227,7 +270,7 @@ export class RoomObject extends DurableObject {
       return;
     }
     try {
-      const { stale } = this.rooms.sweep(id);
+      const { stale, checkoutExpired } = this.rooms.sweep(id);
       for (const ws of this.ctx.getWebSockets()) {
         const c = ws.deserializeAttachment();
         if (
@@ -236,7 +279,7 @@ export class RoomObject extends DurableObject {
         )
           ws.close(4000, "Connection timed out");
       }
-      this.broadcast(id, true);
+      this.broadcast(id, !checkoutExpired);
       await this.schedule(id);
     } catch (error) {
       if (error.code === "ROOM_EXPIRED") await this.erase();
@@ -284,9 +327,23 @@ export default {
       }
       sameOrigin(request);
       const config = configuration(env);
+      if (url.pathname === "/api/shopify/orders-paid") {
+        const order = await readPaidWebhook(request, config);
+        if (!order) return json({ received: true });
+        const response = await env.ROOMS.get(
+          env.ROOMS.idFromName(order.room),
+        ).fetch(
+          new Request("https://internal/internal/paid", {
+            method: "POST",
+            headers: { "x-room-id": order.room },
+            body: JSON.stringify(order),
+          }),
+        );
+        return response.status === 410 ? json({ received: true }) : response;
+      }
       const create = url.pathname === "/api/rooms" && request.method === "POST";
       const match = url.pathname.match(
-        /^\/api\/rooms\/([^/]+)(?:\/(join|session|socket))?$/,
+        /^\/api\/rooms\/([^/]+)(?:\/(join|session|socket|catalog|checkout|checkout-release|haul-demo))?$/,
       );
       if (!create && !match)
         throw new RoomError("NOT_FOUND", "Page not found.", 404);

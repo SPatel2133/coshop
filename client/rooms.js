@@ -20,7 +20,7 @@ export function showScreen(id) {
 }
 export function showStatus(code, message, retry) {
   const titles = {
-    ROOM_FULL: "All six seats are taken.",
+    ROOM_FULL: "All seats are taken.",
     ROOM_EXPIRED: "This room had its moment.",
     INVALID_LINK: "This link goes nowhere.",
     INVALID_SESSION: "Let’s get you back in.",
@@ -35,24 +35,35 @@ export function showStatus(code, message, retry) {
   $("status-retry").onclick = retry || null;
   showScreen("status-page");
 }
-export function showEntry(join, title) {
+export function showEntry(join, title, mode = "sample") {
+  const shopify = !join && mode === "shopify";
   $("room-name-field").hidden = join;
   $("entry-kicker").textContent = join
     ? "They saved you a seat"
-    : "Save them a seat";
+    : shopify
+      ? "Shopify checkout demo"
+      : "Save them a seat";
   $("entry-title").textContent = join
     ? "Your people are here."
     : "Make yourself at home.";
   $("entry-description").textContent = join
     ? title || "A little shopping, together."
-    : "A room for your people and whatever catches your eye.";
-  $("enter-room").textContent = join ? "Join your people ↗" : "Make room ↗";
+    : shopify
+      ? "Browse the connected Shopify store and try its hosted checkout. No purchase is needed."
+      : "Browse 24 sample finds together. This collection has no checkout.";
+  $("enter-room").textContent = join
+    ? "Join your people ↗"
+    : shopify
+      ? "Make Shopify room ↗"
+      : "Make room ↗";
   $("entry-error").textContent = "";
   showScreen("entry");
 }
 export function renderRoom(room, me) {
   $("room-title").textContent = room.name;
-  $("seat-count").textContent = room.participants.length + " / 6 seats";
+  $("seat-count").textContent =
+    `${room.participants.length} / ${room.capacity} seats`;
+  $("invite-capacity").textContent = room.capacity;
   $("first-friend").hidden = room.participants.length > 1;
   if ($("room").hidden) showScreen("room");
 }

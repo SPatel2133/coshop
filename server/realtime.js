@@ -28,9 +28,11 @@ export const stateMessage = (rooms, id, me) => ({
 // and idle changes broadcast a small participant delta, never a whole catalog.
 export function presenceChanges(room, cache) {
   const previous = cache.get(room.id);
-  const membership = JSON.stringify(
+  const membership = JSON.stringify([
     room.participants.map((p) => [p.id, p.connected]),
-  );
+    room.checkout,
+    room.recap?.id,
+  ]);
   const signatures = new Map();
   const messages = [];
   for (const participant of room.participants) {

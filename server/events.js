@@ -59,7 +59,7 @@ export class Events {
       updatedAt: event.created_at,
     };
   }
-  appendView(roomId, userId, input, requestId, now) {
+  appendView(roomId, userId, input, requestId, now, products = this.products) {
     if (
       typeof requestId !== "string" ||
       !/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(
@@ -70,7 +70,7 @@ export class Events {
         "INVALID_VIEW",
         "Use a valid navigation request identifier.",
       );
-    const view = normalizeView(input, this.products);
+    const view = normalizeView(input, products);
     const existing = this.store.all(
       "SELECT * FROM events WHERE id=?",
       requestId,

@@ -3,7 +3,13 @@ import { displayName, avatar, roomName, uniqueName } from "./participants.js";
 import { newToken, digest, tokenHash, makeInvite } from "./security.js";
 import { Events } from "./events.js";
 import { HoldUps } from "./hold-ups.js";
+import { Discussion, isDiscussion } from "./discussion.js";
+import { Bag } from "./bag.js";
+import { RoomStorefronts } from "./storefront.js";
+import { Checkout } from "./checkout.js";
+import { Haul } from "./haul.js";
 import { catalog } from "../catalog.mjs";
+const roomCapacity = 10;
 export const json = (data, status = 200, headers = {}) =>
   new Response(JSON.stringify(data), {
     status,
@@ -39,12 +45,55 @@ export async function readBody(request) {
     throw new RoomError("INVALID_REQUEST", "Send a valid room request.");
   }
 }
-export async function roomHttp(rooms, id, action, request, config) {
+export async function roomHttp(
+  rooms,
+  id,
+  action,
+  request,
+  config,
+  publish = () => {},
+) {
+  if (
+    action === "catalog" ||
+    action === "checkout" ||
+    action === "checkout-release" ||
+    action === "haul-demo"
+  ) {
+    if (request.method !== (action === "catalog" ? "GET" : "POST"))
+      throw new RoomError(
+        "METHOD_NOT_ALLOWED",
+        "Use the room controls to continue.",
+        405,
+      );
+    const person = rooms.auth(
+      id,
+      await tokenHash(
+        request.headers.get("authorization")?.replace(/^Bearer /, ""),
+      ),
+      false,
+    );
+    if (action === "catalog") {
+      await rooms.storefronts.refresh(
+        id,
+        rooms.storefronts.get(id),
+        () => !rooms.checkout.active(id),
+      );
+      rooms.require(id);
+      return json(rooms.storefronts.public(id));
+    }
+    const input = await readBody(request);
+    if (action === "haul-demo")
+      return json({ recap: rooms.haul.demo(id, input) });
+    if (action === "checkout-release")
+      return json(rooms.checkout.release(id, person.id, input.id));
+    return json(await rooms.checkout.start(id, person, input, publish));
+  }
   if (action === "info" && request.method === "GET") {
     rooms.require(id);
     return json({
       name: rooms.row(id).name,
-      full: rooms.seated(id).length >= 6,
+      full: rooms.seated(id).length >= roomCapacity,
+      capacity: roomCapacity,
     });
   }
   if (request.method !== "POST")
@@ -55,11 +104,29 @@ export async function roomHttp(rooms, id, action, request, config) {
     );
   const input = await readBody(request);
   if (action === "create" || action === "join") {
+    let storefront;
+    if (action === "create") {
+      const mode = input.catalogMode ?? "sample";
+      if (mode !== "sample" && mode !== "shopify")
+        throw new RoomError(
+          "INVALID_CATALOG",
+          "Choose a sample or Shopify room.",
+        );
+      if (mode === "shopify") {
+        storefront = await rooms.storefronts?.provider.load();
+        if (!storefront)
+          throw new RoomError(
+            "SHOPIFY_UNAVAILABLE",
+            "The Shopify demo is unavailable. Try again or start a sample room.",
+            503,
+          );
+      }
+    }
     const token = newToken(),
       hash = await digest(token);
     const person =
       action === "create"
-        ? rooms.create(id, input, hash)
+        ? rooms.create(id, input, hash, storefront)
         : rooms.join(id, input, hash);
     return json(
       {
@@ -88,15 +155,53 @@ export async function roomHttp(rooms, id, action, request, config) {
   throw new RoomError("NOT_FOUND", "That room action does not exist.", 404);
 }
 export class Rooms {
-  constructor(store, config, clock = Date.now, products = catalog) {
+  constructor(
+    store,
+    config,
+    clock = Date.now,
+    products = catalog,
+    storefront = null,
+    haul = false,
+  ) {
     Object.assign(this, { store, config, clock });
     this.events = new Events(store, products);
     this.holdUps = new HoldUps(store, products);
+    this.discussion = new Discussion(store);
+    this.bag = new Bag(store, products);
+    if (storefront) {
+      this.storefronts = new RoomStorefronts(
+        store,
+        storefront,
+        products,
+        clock,
+      );
+      this.checkout = new Checkout(this);
+    }
+    if (haul) this.haul = new Haul(this);
+  }
+  products(id) {
+    const storefront = this.storefronts?.get(id);
+    return storefront?.mode === "shopify"
+      ? storefront.products
+      : this.events.products;
+  }
+  roomBag(id) {
+    const storefront = this.storefronts?.get(id);
+    if (storefront?.mode !== "shopify") return this.bag;
+    if (!storefront.bag)
+      storefront.bag = new Bag(
+        this.store,
+        storefront.products,
+        storefront.checks,
+        storefront.expiresAt - 60000,
+      );
+    return storefront.bag;
   }
   row(id) {
     return this.store.all("SELECT * FROM room_records WHERE id=?", id)[0];
   }
   delete(id) {
+    this.storefronts?.cache.delete(id);
     this.store.run("DELETE FROM shared_finds WHERE room_id=?", id);
     this.store.run("DELETE FROM bag_lines WHERE room_id=?", id);
     this.store.run("DELETE FROM events WHERE room_id=?", id);
@@ -137,7 +242,7 @@ export class Rooms {
       now,
     );
   }
-  create(id, input, hash) {
+  create(id, input, hash, storefront) {
     const now = this.clock(),
       name = displayName(input.name),
       color = avatar(input.avatar),
@@ -152,6 +257,7 @@ export class Rooms {
         now,
         now,
       );
+      this.storefronts?.create(id, storefront);
       return this.insert(id, name, color, hash, now);
     });
   }
@@ -181,10 +287,10 @@ export class Rooms {
     this.require(id, now);
     return this.store.transaction(() => {
       const seated = this.seated(id, now);
-      if (seated.length >= 6)
+      if (seated.length >= roomCapacity)
         throw new RoomError(
           "ROOM_FULL",
-          "This room has six seats, and they’re all taken.",
+          `All ${roomCapacity} seats are taken, including seats reserved for reconnecting friends.`,
           409,
         );
       const person = this.insert(
@@ -218,10 +324,10 @@ export class Rooms {
         );
       if (person.seat_until <= now) {
         const seated = this.seated(id, now);
-        if (seated.length >= 6)
+        if (seated.length >= roomCapacity)
           throw new RoomError(
             "ROOM_FULL",
-            "Your reserved seat expired, and this room is now full.",
+            `Your reserved seat expired, and all ${roomCapacity} seats are now taken.`,
             409,
           );
         if (reserve) {
@@ -334,7 +440,11 @@ export class Rooms {
       now - this.config.heartbeatTimeout,
     );
     for (const c of stale) this.disconnect(id, c.id);
-    return { stale: stale.map((c) => c.id), seats: before };
+    return {
+      stale: stale.map((c) => c.id),
+      seats: before,
+      checkoutExpired: this.checkout?.sweep(id, now),
+    };
   }
   publishView(id, connectionId, input, requestId) {
     const now = this.clock();
@@ -358,6 +468,7 @@ export class Rooms {
         input,
         requestId,
         now,
+        this.products(id),
       );
       if (result.accepted && !result.replay) {
         this.store.run(
@@ -372,7 +483,7 @@ export class Rooms {
   }
   shopCommand(id, connectionId, message) {
     const now = this.clock();
-    this.require(id, now);
+    const room = this.require(id, now);
     const connection = this.store.all(
       "SELECT * FROM connections WHERE room_id=? AND id=? AND last_seen_at>?",
       id,
@@ -387,21 +498,47 @@ export class Rooms {
       );
     try {
       return this.store.transaction(() => {
-        const result = this.holdUps.append(
-          id,
-          connection.participant_id,
-          message,
-          now,
-        );
-        if (!result.replay) {
+        const touch = () => {
           this.store.run(
             "UPDATE connections SET last_activity_at=? WHERE id=?",
             now,
             connectionId,
           );
           this.bump(id, now, true);
+        };
+        if (isDiscussion(message.type))
+          return this.discussion.command(
+            id,
+            connection.participant_id,
+            message,
+            now,
+            room.version,
+            touch,
+          );
+        if (message.type === "bag_change") {
+          if (this.checkout?.active(id))
+            throw new RoomError(
+              "CHECKOUT_BUSY",
+              "The shared bag is locked while someone checks out.",
+              409,
+            );
+          return this.roomBag(id).command(
+            id,
+            connection.participant_id,
+            message,
+            now,
+            touch,
+          );
         }
-        const bag = this.holdUps.bag(id);
+        const result = this.holdUps.append(
+          id,
+          connection.participant_id,
+          message,
+          now,
+          this.products(id),
+        );
+        if (!result.replay) touch();
+        const bag = this.roomBag(id).snapshot(id);
         const find = this.holdUps.finds(id, result.event.variantId)[0];
         return {
           ack: {
@@ -469,10 +606,14 @@ export class Rooms {
       name: room.name,
       version: room.version,
       expiresAt: room.last_active_at + this.config.ttl,
-      capacity: 6,
+      capacity: roomCapacity,
       participants,
-      bag: this.holdUps.bag(id),
+      bag: this.roomBag(id).snapshot(id),
       finds: this.holdUps.finds(id),
+      catalogMode: this.storefronts?.get(id).mode || "sample",
+      checkoutEnabled: this.storefronts?.enabled(id) ?? false,
+      ...(this.checkout ? { checkout: this.checkout.active(id) } : {}),
+      ...(this.haul ? { recap: this.haul.latest(id) } : {}),
       serverTime: now,
     };
   }
@@ -481,6 +622,8 @@ export class Rooms {
     if (!room) return null;
     const now = this.clock(),
       deadlines = [room.last_active_at + this.config.ttl];
+    const checkout = this.checkout?.active(id);
+    if (checkout) deadlines.push(checkout.expiresAt);
     for (const c of this.store.all(
       "SELECT last_seen_at,last_activity_at FROM connections WHERE room_id=?",
       id,

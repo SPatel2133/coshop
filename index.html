@@ -26,12 +26,17 @@
         <p class="eyebrow">A little less link sharing.</p>
         <h1>Your people.<br />Your kind of <span>finds.</span></h1>
         <p class="intro">
-          Stay on your call. Make a little room for everyone.<br />Six friends.
+          Stay on your call. Make a little room for everyone.<br />Ten friends.
           One store. Your own way around.
         </p>
-        <button id="start-room" class="primary">
-          Start a shopping room <span>↗</span>
-        </button>
+        <div class="room-start-actions">
+          <button id="start-room" class="primary" type="button">
+            Start a shopping room <span aria-hidden="true">↗</span>
+          </button>
+          <button id="start-shopify-room" class="secondary" type="button">
+            Try Shopify checkout <span aria-hidden="true">↗</span>
+          </button>
+        </div>
         <p class="fine">No accounts. Just an invite and your people.</p>
       </div>
       <div class="art" aria-hidden="true">
@@ -68,7 +73,7 @@
     |   +  +  +    |
      \____________/
        |        |
-   six seats. good company.</pre
+   ten seats. good company.</pre
         >
       </section>
       <form id="identity-form" class="identity-card">
@@ -162,6 +167,32 @@
       ><a href="/" class="primary">Start a new room ↗</a>
     </main>
     <main id="room" class="phase-one-room phase-two-room" data-screen hidden>
+      <section
+        id="haul-banner"
+        class="haul-banner"
+        hidden
+        aria-label="Shopping recap"
+      >
+        <div>
+          <p id="haul-banner-label" class="eyebrow" role="status"></p>
+          <p id="haul-banner-summary"></p>
+        </div>
+        <button
+          id="open-haul"
+          class="secondary"
+          type="button"
+          aria-haspopup="dialog"
+          aria-controls="haul-dialog"
+        >
+          View the haul ↗
+        </button>
+      </section>
+      <p
+        id="checkout-banner"
+        class="connection-banner"
+        role="status"
+        hidden
+      ></p>
       <div class="connection-banner" id="reconnect-notice" role="status" hidden>
         <span>Reconnecting… Your identity and reserved seat are safe.</span
         ><button id="reconnect-now" class="quiet">Retry now</button>
@@ -173,18 +204,47 @@
           <p id="room-description">Wander a little. You’re in good company.</p>
         </div>
         <div class="room-tools">
+          <div class="finds-launcher">
+            <button
+              id="open-finds"
+              class="secondary finds-toggle"
+              type="button"
+              aria-expanded="false"
+              aria-controls="finds-panel"
+            >
+              Around the room
+              <span id="finds-unseen" class="finds-unseen" hidden>0</span>
+            </button>
+            <span
+              id="finds-alert"
+              class="finds-alert"
+              role="status"
+              aria-atomic="true"
+            ></span>
+          </div>
           <button
-            id="open-finds"
-            class="secondary finds-toggle"
+            id="open-bag"
+            class="bag-receipt"
+            type="button"
             aria-haspopup="dialog"
-            aria-controls="finds-drawer"
+            aria-controls="bag-drawer"
+            aria-expanded="false"
           >
-            Our finds
-            <span id="finds-unseen" class="finds-unseen" hidden>0</span>
+            <svg
+              aria-hidden="true"
+              width="16"
+              height="17"
+              viewBox="0 0 20 21"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.4"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M4 7h12l1 12H3L4 7Z M7 9V5a3 3 0 0 1 6 0v4" />
+            </svg>
+            Shared bag <span id="bag-count" class="bag-count">0</span>
           </button>
-          <span id="bag-count" class="bag-receipt" role="status"
-            >Shared bag · 0</span
-          >
           <span id="connection" class="connection">Connecting…</span
           ><button id="invite" class="secondary">Invite your people ↗</button>
         </div>
@@ -229,26 +289,61 @@
           <section class="catalog-panel" id="collection-page">
             <div class="catalog-toolbar">
               <div>
-                <p class="eyebrow">The sample collection</p>
+                <p id="catalog-source" class="eyebrow">The sample collection</p>
                 <h2>A few things to wander through.</h2>
               </div>
-              <span class="sample-badge">Sample products · no checkout</span>
+              <span id="catalog-badge" class="sample-badge"
+                >Sample products · no checkout</span
+              >
             </div>
             <nav
               id="category-filters"
               class="category-filters"
               aria-label="Product categories"
             ></nav>
+            <div
+              class="collection-search"
+              role="search"
+              aria-label="Sample collection"
+            >
+              <label for="catalog-search">Search the collection</label>
+              <div>
+                <input
+                  id="catalog-search"
+                  type="search"
+                  placeholder="Try headphones, lamp or Stone"
+                  autocomplete="off"
+                  maxlength="120"
+                />
+                <button
+                  id="clear-catalog-search"
+                  class="quiet"
+                  type="button"
+                  hidden
+                >
+                  Clear search
+                </button>
+              </div>
+              <p
+                id="catalog-result-count"
+                class="fine"
+                role="status"
+                aria-atomic="true"
+              ></p>
+            </div>
             <div id="products" class="product-grid"></div>
-            <p class="fine catalog-disclosure">
+            <div id="catalog-empty" class="catalog-empty" hidden>
+              <h3>No products found.</h3>
+              <p>Try a different search or browse another category.</p>
+            </div>
+            <p id="catalog-disclosure" class="fine catalog-disclosure">
               A sample collection to wander through together. These products
-              cannot be purchased. Share a find to add it to Our finds, separate
-              from the bag. Bag editing and Shopify checkout arrive in later
-              phases.
+              cannot be purchased. Share a find to save it in Our finds, or use
+              Add to bag to make a shared pick.
             </p>
           </section>
         </div>
-        <div id="finds-desktop">
+        <div id="finds-desktop" inert aria-hidden="true">
           <aside
             id="finds-panel"
             class="finds-panel"
@@ -257,51 +352,267 @@
             <header class="finds-heading">
               <div>
                 <p class="eyebrow">A little good company</p>
-                <h2 id="finds-heading">
-                  Our finds <span id="finds-count">0</span>
-                </h2>
+                <h2 id="finds-heading">Around the room</h2>
               </div>
               <button
                 id="close-finds"
                 class="quiet finds-close"
-                aria-label="Close Our finds"
+                aria-label="Close room panel"
                 type="button"
               >
                 Close ×
               </button>
             </header>
-            <p id="finds-connection" class="finds-intro fine">
-              Worth a look, together.
-            </p>
-            <div id="finds-empty" class="finds-empty">
-              <pre aria-hidden="true">
+            <div
+              class="room-panel-tabs"
+              role="tablist"
+              aria-label="Room activity"
+            >
+              <button
+                id="finds-tab"
+                type="button"
+                role="tab"
+                aria-selected="true"
+                aria-controls="finds-view"
+              >
+                Our finds <span id="finds-count" aria-hidden="true">0</span>
+              </button>
+              <button
+                id="chat-tab"
+                type="button"
+                role="tab"
+                aria-selected="false"
+                aria-controls="chat-view"
+                tabindex="-1"
+              >
+                Chat
+              </button>
+            </div>
+            <section
+              id="finds-view"
+              class="room-panel-view"
+              role="tabpanel"
+              aria-labelledby="finds-tab"
+            >
+              <div id="finds-content" class="room-panel-view">
+                <p id="finds-connection" class="finds-intro fine">
+                  Worth a look, together.
+                </p>
+                <div id="finds-empty" class="finds-empty">
+                  <pre aria-hidden="true">
 [ : ) ]
    +
 [     ]</pre
-              >
-              <h3>Something catch your eye?</h3>
-              <p>Share a find and it’ll land here for everyone.</p>
+                  >
+                  <h3>Something catch your eye?</h3>
+                  <p>Share a find and it’ll land here for everyone.</p>
+                </div>
+                <div
+                  id="finds-list"
+                  class="finds-list"
+                  role="region"
+                  aria-label="Shared finds"
+                  tabindex="0"
+                ></div>
+                <p id="finds-disclosure" class="finds-disclosure fine">
+                  Sample collection · reference prices, not live inventory.
+                  Sharing doesn’t add to the bag.
+                </p>
+              </div>
+              <div id="finds-thread" class="room-panel-view" hidden></div>
+            </section>
+            <section
+              id="chat-view"
+              class="room-panel-view"
+              role="tabpanel"
+              aria-labelledby="chat-tab"
+              hidden
+            ></section>
+            <div id="discussion-view" class="room-panel-view" hidden>
+              <header id="discussion-heading" class="thread-heading" hidden>
+                <button id="discussion-back" class="quiet" type="button">
+                  ← Back to Our finds
+                </button>
+                <h3 id="discussion-product"></h3>
+                <p id="discussion-variant" class="fine"></p>
+              </header>
+              <div class="discussion-body">
+                <div
+                  id="discussion-scroll"
+                  class="discussion-scroll"
+                  role="region"
+                  aria-label="Messages"
+                  tabindex="0"
+                >
+                  <button
+                    id="discussion-earlier"
+                    type="button"
+                    class="quiet"
+                    hidden
+                  >
+                    Load earlier messages
+                  </button>
+                  <p id="discussion-empty" class="discussion-empty">
+                    Start the conversation.
+                  </p>
+                  <button
+                    id="discussion-retry"
+                    type="button"
+                    class="quiet"
+                    hidden
+                  >
+                    Retry loading messages
+                  </button>
+                  <ol id="discussion-entries" class="discussion-entries"></ol>
+                </div>
+                <button
+                  id="discussion-new"
+                  type="button"
+                  class="discussion-jump quiet"
+                  hidden
+                >
+                  New messages ↓
+                </button>
+              </div>
+              <form id="discussion-form" class="discussion-form">
+                <label id="discussion-label" for="discussion-input"
+                  >Message the room</label
+                >
+                <textarea
+                  id="discussion-input"
+                  maxlength="400"
+                  rows="2"
+                  autocomplete="off"
+                ></textarea>
+                <div class="discussion-submit">
+                  <span
+                    id="discussion-status"
+                    class="fine"
+                    role="status"
+                  ></span>
+                  <button id="discussion-send" type="submit" disabled>
+                    Send
+                  </button>
+                </div>
+              </form>
             </div>
-            <div
-              id="finds-list"
-              class="finds-list"
-              role="region"
-              aria-label="Shared finds"
-              tabindex="0"
-            ></div>
-            <p class="finds-disclosure fine">
-              Sample collection · reference prices, not live inventory. Sharing
-              doesn’t add to the bag.
-            </p>
           </aside>
         </div>
       </div>
+      <button
+        id="open-bag-quick"
+        class="bag-receipt bag-shortcut"
+        type="button"
+        aria-haspopup="dialog"
+        aria-controls="bag-drawer"
+        aria-expanded="false"
+      >
+        <svg
+          aria-hidden="true"
+          width="16"
+          height="17"
+          viewBox="0 0 20 21"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.4"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M4 7h12l1 12H3L4 7Z M7 9V5a3 3 0 0 1 6 0v4" />
+        </svg>
+        Bag <span id="bag-count-quick" class="bag-count">0</span>
+      </button>
     </main>
     <dialog
       id="finds-drawer"
       class="finds-drawer"
       aria-labelledby="finds-heading"
     ></dialog>
+    <dialog id="bag-drawer" aria-labelledby="bag-heading">
+      <div class="bag-inner">
+        <header class="bag-header">
+          <div>
+            <p class="eyebrow">Picked together</p>
+            <h2 id="bag-heading">Shared bag</h2>
+            <p id="bag-summary" class="fine">0 items</p>
+          </div>
+          <button
+            id="close-bag"
+            class="quiet"
+            type="button"
+            aria-label="Close shared bag"
+            autofocus
+          >
+            Close ×
+          </button>
+        </header>
+        <p id="bag-status" class="fine" role="status"></p>
+        <div class="bag-contents">
+          <div id="bag-empty" class="bag-empty">
+            <pre aria-hidden="true">
+  .--.
+ /    \
+[      ]
+ '----'</pre
+            >
+            <h3>A little room for your picks.</h3>
+            <p>
+              Find something you’d take home? Use Add to bag on its product
+              page.
+            </p>
+          </div>
+          <ul id="bag-items" aria-label="Items in the shared bag"></ul>
+        </div>
+        <footer class="bag-footer">
+          <div>
+            <span>Estimated subtotal</span><strong id="bag-total">—</strong>
+          </div>
+          <p id="bag-warning" class="fine" hidden></p>
+          <p id="bag-disclosure" class="fine">
+            Sample collection · reference prices. Checkout isn’t available in
+            this demo.
+          </p>
+          <div id="bag-checkout-actions" hidden>
+            <button id="bag-checkout" class="primary" type="button">
+              Continue to Shopify
+            </button>
+            <button
+              id="bag-checkout-release"
+              class="quiet"
+              type="button"
+              hidden
+            >
+              Unlock bag
+            </button>
+          </div>
+          <div id="bag-demo-actions" hidden>
+            <button id="bag-demo-complete" class="secondary" type="button">
+              Demo completion · simulated
+            </button>
+          </div>
+        </footer>
+      </div>
+    </dialog>
+    <dialog id="haul-dialog" aria-labelledby="haul-heading">
+      <header class="haul-heading">
+        <div>
+          <p id="haul-mode" class="eyebrow"></p>
+          <h2 id="haul-heading">The haul.</h2>
+        </div>
+        <button id="close-haul" class="quiet" type="button" autofocus>
+          Close ×
+        </button>
+      </header>
+      <p id="haul-detail"></p>
+      <div class="haul-total">
+        <span id="haul-count"></span><strong id="haul-total"></strong>
+      </div>
+      <ul id="haul-items" aria-label="Items in the haul"></ul>
+      <section id="haul-highlights" hidden>
+        <h3>Most shared in the room</h3>
+        <ul id="haul-shares"></ul>
+      </section>
+    </dialog>
     <dialog id="invite-dialog">
       <button
         class="close"
@@ -312,7 +623,10 @@
       </button>
       <p class="eyebrow">Save them a seat</p>
       <h2>Your people, right here.</h2>
-      <p>Send this link in your call chat. Up to six people, including you.</p>
+      <p>
+        Send this link in your call chat. Up to
+        <span id="invite-capacity"></span> people, including you.
+      </p>
       <label class="sr-only" for="invite-url">Invitation link</label
       ><input id="invite-url" readonly /><button
         id="copy-invite"
