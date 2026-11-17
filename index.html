@@ -1,26 +1,260 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f8f7f4"><title>Shopping Room — good finds, together.</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/mobile.css"></head>
-<body>
-<header class="top"><a class="wordmark" href="/">shopping room<span class="mark">↗</span></a><span class="top-note">Good finds are better shared.</span><button id="store-button" class="quiet">Connect Shopify</button></header>
-<main id="landing">
- <div class="hero"><p class="eyebrow">A little less link sharing.</p><h1>Found something?<br>Show your <span>person.</span></h1><p class="intro">Browse on your own. Put your favorites on the same table.<br>Find something you both love.</p><form id="create-form"><label class="sr-only" for="host-name">Your name</label><input id="host-name" maxlength="24" placeholder="Your first name" required autocomplete="given-name"><button class="primary">Start a shopping room <span>↗</span></button></form><p class="fine">Up to six friends. One shared room. No account needed.</p></div>
- <div class="art" aria-hidden="true"><pre id="ascii"></pre><div class="floating-card first"><img src="https://images.unsplash.com/photo-1546435770-a3e426bf472b?auto=format&fit=crop&w=500&q=85" alt=""><span>A little quiet <b>♡</b></span></div><div class="floating-card second"><img src="https://images.unsplash.com/photo-1524805444758-089113d48a6d?auto=format&fit=crop&w=500&q=85" alt=""><span>Time well spent <b>↗</b></span></div><div class="art-label">you found it. they get it.</div></div>
- <footer class="landing-footer"><span>Made for the “wait, look at this” moments.</span><span>Interactive portfolio demo · Sample collection</span></footer>
-</main>
-<main id="room" hidden data-mobile-view="browse">
- <p id="reconnect-notice" class="reconnect-notice" role="status" hidden>Reconnecting to your room. Your saved picks and basket will return automatically.</p>
- <nav class="mobile-tabs" aria-label="Shopping views"><button type="button" id="browse-tab" aria-pressed="true">Browse</button><button type="button" id="table-tab" aria-pressed="false">Our table <span id="mobile-pick-count">0</span></button><button type="button" id="basket-tab" aria-pressed="false">Basket <span id="mobile-basket-count">0</span></button></nav>
- <section class="room-heading"><div><p class="eyebrow" id="collection-label"></p><h1>Your kind of finds.</h1><p>Explore a little. Bring your favorites to the table.</p></div><div class="room-tools"><div id="members" class="members"></div><button id="invite" class="secondary">Invite your person ↗</button></div></section>
- <section class="live-browsing" aria-label="Shop together"><div><strong id="browse-status">Browse together</strong><p id="friend-view" aria-live="polite"></p><small id="sync-metric" title="Estimated propagation delay, including the polling interval and network transit"></small></div><div class="live-controls"><button id="follow" class="secondary" type="button">Follow your friend</button><button id="lead" class="secondary" type="button">Take the lead</button></div></section>
- <div class="workspace"><section class="catalog-panel"><div class="catalog-toolbar"><nav id="filters" aria-label="Product categories"></nav><label class="search"><span class="sr-only">Search products</span><input id="search" placeholder="Find something…" type="search"></label></div><div id="products" class="product-grid"></div><p class="fine" id="catalog-note"></p></section>
- <aside class="together-panel"><div class="panel-heading"><h2>Our table <span id="pick-count">0</span></h2><span id="connection" class="connection">Connected</span></div><p class="panel-intro">The things worth a second opinion.</p><div id="picks"></div><section class="basket-section"><div class="panel-heading"><h2>Shared basket</h2><span id="basket-count">0 items</span></div><div id="basket"></div><div class="total"><span>Subtotal</span><strong id="total"></strong></div><p class="fine">Shipping and taxes calculated at checkout.</p><div id="approval-status"></div><button id="approve" class="secondary full">Looks good to me</button><button id="checkout" class="primary full">Continue together ↗</button><p class="fine" id="checkout-note"></p><div id="checkout-result"></div></section><details class="activity"><summary>Room activity</summary><div id="activity"></div></details></aside></div>
-</main>
-<dialog id="join-dialog"><form id="join-form"><p class="eyebrow">A seat at the table</p><h2>Your person invited you.</h2><p>Bring your taste. Find something together.</p><label for="guest-name">Your first name</label><input id="guest-name" maxlength="24" required autocomplete="given-name"><button class="primary full">Join the room ↗</button><a href="/" class="text-link">Start your own room</a></form></dialog>
-<dialog id="product-dialog"><button class="close" data-close="product-dialog" aria-label="Close product">×</button><div id="product-detail"></div></dialog>
-<dialog id="store-dialog"><button class="close" data-close="store-dialog" aria-label="Close store settings">×</button><form id="store-form"><p class="eyebrow">Bring your collection</p><h2>Connect Shopify.</h2><p>Try Shopify’s public Hydrogen demo store, or connect your own development store before adding picks.</p><button type="button" id="shopify-demo" class="secondary full">Try Shopify’s demo store ↗</button><label for="domain">Your store domain</label><input id="domain" required placeholder="your-store.myshopify.com"><label for="token">Public Storefront token</label><input id="token" type="password" required autocomplete="off"><p class="fine">Use a public Storefront token. It is stored server-side and excluded from Git.</p><button class="primary full">Load collection ↗</button><p id="store-error" role="status"></p></form></dialog>
-<dialog id="invite-dialog"><button class="close" data-close="invite-dialog" aria-label="Close invitation">×</button><p class="eyebrow">Save them a seat</p><h2>Better with your person.</h2><p>Open this link in a different browser or private window to join as the second shopper.</p><input id="invite-url" readonly aria-label="Room invitation link"><button id="copy-invite" class="primary full">Copy invite link</button><a id="guest-preview" class="text-link" target="_blank" rel="noopener">Open second shopper for demo ↗</a><p class="fine">Use the laptop Wi-Fi address on both devices, on the same network. Keep the laptop running.</p></dialog>
-<div id="toast" role="status" aria-live="polite" hidden></div>
-<script type="module" src="/app.js"></script></body></html>
-
-
-
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#f8f7f4" />
+    <meta name="referrer" content="no-referrer" />
+    <meta
+      name="description"
+      content="A little shopping together. Make a room, invite your people, and find your kind of things."
+    />
+    <title>coshop — good finds, together.</title>
+    <link rel="stylesheet" href="/style.css" />
+    <link rel="stylesheet" href="/mobile.css" />
+  </head>
+  <body>
+    <header class="top">
+      <a class="wordmark" href="/" aria-label="coshop home"
+        >coshop<span class="mark">↗</span></a
+      >
+      <span class="top-note">Good finds are better shared.</span>
+      <span class="phase-label">A little shopping together</span>
+    </header>
+    <main id="landing" data-screen>
+      <div class="hero">
+        <p class="eyebrow">A little less link sharing.</p>
+        <h1>Your people.<br />Your kind of <span>finds.</span></h1>
+        <p class="intro">
+          Stay on your call. Make a little room for everyone.<br />Six friends.
+          One store. Your own way around.
+        </p>
+        <button id="start-room" class="primary">
+          Start a shopping room <span>↗</span>
+        </button>
+        <p class="fine">No accounts. Just an invite and your people.</p>
+      </div>
+      <div class="art" aria-hidden="true">
+        <pre id="ascii"></pre>
+        <div class="floating-card first">
+          <img
+            src="https://images.unsplash.com/photo-1546435770-a3e426bf472b?auto=format&fit=crop&w=500&q=85"
+            alt=""
+          /><span>A little quiet <b>♡</b></span>
+        </div>
+        <div class="floating-card second">
+          <img
+            src="https://images.unsplash.com/photo-1524805444758-089113d48a6d?auto=format&fit=crop&w=500&q=85"
+            alt=""
+          /><span>Time well spent <b>↗</b></span>
+        </div>
+        <div class="art-label">you found it. they get it.</div>
+      </div>
+      <footer class="landing-footer">
+        <span>Made for the “wait, look at this” moments.</span
+        ><span>Portfolio build · Phase 1: rooms</span>
+      </footer>
+    </main>
+    <main id="entry" class="entry-page" data-screen hidden>
+      <section class="entry-story">
+        <p class="eyebrow" id="entry-kicker">Save them a seat</p>
+        <h1 id="entry-title" tabindex="-1">Make yourself<br />at home.</h1>
+        <p id="entry-description">
+          A room for your people and whatever catches your eye.
+        </p>
+        <pre class="seat-art" aria-hidden="true">
+      .----------.
+     /  +  +  +   \
+    |   +  +  +    |
+     \____________/
+       |        |
+   six seats. good company.</pre
+        >
+      </section>
+      <form id="identity-form" class="identity-card">
+        <div id="room-name-field">
+          <label for="room-name"
+            >Name your room <span class="optional">optional</span></label
+          ><input
+            id="room-name"
+            maxlength="60"
+            placeholder="Whatever we find today"
+            autocomplete="off"
+          />
+        </div>
+        <label for="display-name">What should we call you?</label
+        ><input
+          id="display-name"
+          maxlength="32"
+          placeholder="Your name"
+          autocomplete="nickname"
+          required
+          aria-describedby="name-help"
+        />
+        <p id="name-help" class="fine">
+          A display name is all you need. Matching names get a number.
+        </p>
+        <fieldset class="avatar-picker">
+          <legend>Pick a little you</legend>
+          <label class="avatar-option" title="Sage"
+            ><input type="radio" name="avatar" value="sage" checked /><span
+              class="face sage"
+              aria-hidden="true"
+              >:)</span
+            ><span class="sr-only">Sage avatar</span></label
+          >
+          <label class="avatar-option" title="Clay"
+            ><input type="radio" name="avatar" value="clay" /><span
+              class="face clay"
+              aria-hidden="true"
+              >:›</span
+            ><span class="sr-only">Clay avatar</span></label
+          >
+          <label class="avatar-option" title="Butter"
+            ><input type="radio" name="avatar" value="butter" /><span
+              class="face butter"
+              aria-hidden="true"
+              >:D</span
+            ><span class="sr-only">Butter avatar</span></label
+          >
+          <label class="avatar-option" title="Lilac"
+            ><input type="radio" name="avatar" value="lilac" /><span
+              class="face lilac"
+              aria-hidden="true"
+              >:3</span
+            ><span class="sr-only">Lilac avatar</span></label
+          >
+          <label class="avatar-option" title="Sky"
+            ><input type="radio" name="avatar" value="sky" /><span
+              class="face sky"
+              aria-hidden="true"
+              >:o</span
+            ><span class="sr-only">Sky avatar</span></label
+          >
+          <label class="avatar-option" title="Rose"
+            ><input type="radio" name="avatar" value="rose" /><span
+              class="face rose"
+              aria-hidden="true"
+              >;)</span
+            ><span class="sr-only">Rose avatar</span></label
+          >
+        </fieldset>
+        <p id="entry-error" class="form-error" role="alert"></p>
+        <button id="enter-room" class="primary full">Make room ↗</button>
+        <a href="/" class="text-link">Back to coshop</a>
+        <p class="fine privacy-note">
+          Your identity stays on this browser. If your connection drops, we save
+          your seat for 10 minutes. Rooms disappear after 24 hours without
+          activity.
+        </p>
+      </form>
+    </main>
+    <main id="status-page" class="status-page" data-screen hidden>
+      <pre class="status-art" aria-hidden="true">
+   .------.
+   | : ·  |
+   '------'</pre
+      >
+      <p id="status-kicker" class="eyebrow">A moment, together</p>
+      <h1 id="status-title" tabindex="-1">Finding your room…</h1>
+      <p id="status-description" role="status"></p>
+      <button id="status-retry" class="secondary" hidden>Try again ↗</button
+      ><a href="/" class="primary">Start a new room ↗</a>
+    </main>
+    <main id="room" class="phase-one-room" data-screen hidden>
+      <div class="connection-banner" id="reconnect-notice" role="status" hidden>
+        <span>Reconnecting… Your identity and reserved seat are safe.</span
+        ><button id="reconnect-now" class="quiet">Retry now</button>
+      </div>
+      <section class="room-heading">
+        <div>
+          <p class="eyebrow">A room for your people</p>
+          <h1 id="room-title" tabindex="-1"></h1>
+          <p id="room-description">Wander a little. You’re in good company.</p>
+        </div>
+        <div class="room-tools">
+          <span id="connection" class="connection">Connecting…</span
+          ><button id="invite" class="secondary">Invite your people ↗</button>
+        </div>
+      </section>
+      <section class="room-company" aria-label="People in this room">
+        <div class="company-heading">
+          <span>Good company</span><span id="seat-count"></span>
+        </div>
+        <ul id="members" class="seat-list" aria-live="polite"></ul>
+        <p id="company-note" class="fine"></p>
+      </section>
+      <section class="first-friend" id="first-friend">
+        <div>
+          <span class="tiny-ascii" aria-hidden="true">[ : ) ] + [ ? ]</span>
+          <h2>You’re the first one here.</h2>
+          <p>Drop the invite in your call chat. We’ll save them a seat.</p>
+        </div>
+        <button id="invite-empty" class="primary">Share your room ↗</button>
+      </section>
+      <section class="catalog-panel">
+        <div class="catalog-toolbar">
+          <div>
+            <p class="eyebrow">The sample collection</p>
+            <h2>A few things to wander through.</h2>
+          </div>
+          <span class="sample-badge">Sample products · browsing only</span>
+        </div>
+        <div id="products" class="product-grid"></div>
+        <p class="fine catalog-disclosure">
+          Phase 1: rooms and connections. Product presence arrives in Phase 2;
+          Hold up and the shared bag follow. These sample products cannot be
+          purchased.
+        </p>
+      </section>
+    </main>
+    <dialog id="invite-dialog">
+      <button
+        class="close"
+        data-close="invite-dialog"
+        aria-label="Close invitation"
+      >
+        ×
+      </button>
+      <p class="eyebrow">Save them a seat</p>
+      <h2>Your people, right here.</h2>
+      <p>Send this link in your call chat. Up to six people, including you.</p>
+      <label class="sr-only" for="invite-url">Invitation link</label
+      ><input id="invite-url" readonly /><button
+        id="copy-invite"
+        class="primary full"
+      >
+        Copy invite link ↗
+      </button>
+      <p id="copy-status" role="status" class="fine"></p>
+      <details class="demo-windows">
+        <summary>Testing on one browser?</summary>
+        <p class="fine">
+          These open separate demo identities. Refreshing keeps each identity.
+        </p>
+        <div id="guest-links"></div>
+      </details>
+      <p class="fine privacy-note">
+        The link invites someone in. It never contains your personal session
+        token.
+      </p>
+    </dialog>
+    <dialog id="product-dialog">
+      <button
+        class="close"
+        data-close="product-dialog"
+        aria-label="Close product"
+      >
+        ×
+      </button>
+      <div id="product-detail"></div>
+    </dialog>
+    <div id="toast" role="status" aria-live="polite" hidden></div>
+    <noscript
+      ><p class="status-page">
+        JavaScript is needed for live shopping rooms. Enable it and reload.
+      </p></noscript
+    >
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

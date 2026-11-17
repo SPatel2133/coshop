@@ -1,0 +1,1 @@
+CREATE TABLE room_locks (room_id TEXT PRIMARY KEY NOT NULL, token TEXT NOT NULL, expires_at INTEGER NOT NULL);

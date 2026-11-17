@@ -1,0 +1,6 @@
+# Copy to .dev.vars and set this to 32+ cryptographically random characters.
+INVITE_SIGNING_SECRET=
+SHOPIFY_STORE_DOMAIN=
+SHOPIFY_STOREFRONT_TOKEN=
+SHOPIFY_API_VERSION=2026-10
+SHOPIFY_BUYER_COUNTRY=CA

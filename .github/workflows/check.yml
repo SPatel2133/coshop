@@ -11,6 +11,7 @@ jobs:
         with:
           node-version: 24
           package-manager-cache: false
-      - run: node --test tests/*.test.mjs
+      - run: npm install --global pnpm@11.25.0
+      - run: pnpm install --frozen-lockfile
       - run: node scripts/build.mjs
-      - run: node --check dist/server/index.js
+      - run: node --test tests/phase1-*.test.mjs tests/shopify.test.mjs

@@ -1,87 +1,297 @@
-import { catalog } from './catalog.mjs';
-import { view, update, changed, log } from './room-domain.mjs';
-
-const assetHeaders = { 'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff' };
-const conflict = () => Object.assign(new Error('The room changed. Review the latest state and try again.'), { status: 409 });
-async function digest(value) {
-  const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
-  return Array.from(new Uint8Array(bytes), b => b.toString(16).padStart(2, '0')).join('');
-}
-async function readBody(request) {
-  const reader = request.body?.getReader();
-  if (!reader) return {};
-  let length = 0, text = '';
-  const decoder = new TextDecoder();
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    length += value.byteLength;
-    if (length > 12000) { await reader.cancel(); throw new Error('Request too large.'); }
-    text += decoder.decode(value, { stream: true });
+import { DurableObject } from "cloudflare:workers";
+import schema from "./drizzle/room-object/0001_rooms.sql";
+import { configuration, RoomError } from "./server/config.js";
+import { verifyInvite, tokenHash, sameOrigin } from "./server/security.js";
+import { objectStore, migrate } from "./server/storage.js";
+import { Rooms, roomHttp, json } from "./server/rooms.js";
+import { rateKey, consume } from "./server/abuse.js";
+import { errorMessage, parseMessage, stateMessage } from "./server/realtime.js";
+const failure = (error) =>
+  json(
+    errorMessage(error),
+    error.status || 500,
+    error.retryAfter ? { "Retry-After": String(error.retryAfter) } : {},
+  );
+export class RoomObject extends DurableObject {
+  constructor(ctx, env) {
+    super(ctx, env);
+    this.config = configuration(env);
+    this.store = objectStore(ctx.storage);
+    ctx.blockConcurrencyWhile(async () => {
+      migrate(this.store, schema);
+    });
+    this.rooms = new Rooms(this.store, this.config);
   }
-  const data = JSON.parse(text + decoder.decode());
-  if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Invalid request.');
-  return data;
-}
-function response(data, status = 200) {
-  return Response.json(data, { status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
-}
-async function limit(db, key, max, windowMs) {
-  const bucket = Math.floor(Date.now() / windowMs);
-  const result = await db.prepare('INSERT INTO quotas (id, count) VALUES (?, 1) ON CONFLICT(id) DO UPDATE SET count=count+1 RETURNING count').bind(key + ':' + bucket).first();
-  if (result.count > max) throw Object.assign(new Error('Demo request limit reached. Please try again later.'), { status: 429 });
-}
-export async function handleApi(request, env) {
-  try {
-    const url = new URL(request.url);
-    if (request.method === 'POST' && request.headers.get('Origin') && request.headers.get('Origin') !== url.origin) return response({ error: 'Use the shopping room page to make changes.' }, 403);
-    if (url.pathname === '/api/health') return response({ ok: true, storage: 'D1', serverTime: Date.now() });
-    if (!env.DB) throw new Error('Room storage is unavailable.');
-    if (url.pathname === '/api/rooms' && request.method === 'POST') {
-      await limit(env.DB, 'create:' + await digest(request.headers.get('CF-Connecting-IP') || 'demo'), 12, 3600000);
-      const op = await readBody(request), key = crypto.randomUUID();
-      const member = { id: crypto.randomUUID(), name: String(op.name || 'You').trim().slice(0, 24) || 'You', hash: await digest(key) };
-      const room = { id: crypto.randomUUID(), owner: member.id, leaderId: member.id, version: 0, basketVersion: 0, members: [member], catalog, table: [], basket: [], approvals: [], activity: [], checkout: null, expiresAt: Date.now() + 7 * 86400000 };
-      await env.DB.prepare('INSERT INTO rooms (id,state) VALUES (?,?)').bind(room.id, JSON.stringify(room)).run();
-      return response({ key, room: view(room, member) }, 201);
+  id() {
+    return this.erased
+      ? undefined
+      : this.store.all("SELECT id FROM room_records")[0]?.id;
+  }
+  async schedule(id) {
+    const deadlines = [this.rooms.nextAlarm(id)];
+    for (const ws of this.ctx.getWebSockets()) {
+      const c = ws.deserializeAttachment();
+      if (!c?.person) deadlines.push(c.created + 5000);
     }
-    const match = url.pathname.match(/^\/api\/rooms\/([a-f0-9-]{36})(\/join)?$/);
-    if (!match) return response({ error: 'Not found' }, 404);
-    const row = await env.DB.prepare('SELECT state FROM rooms WHERE id=?').bind(match[1]).first();
-    if (!row) return response({ error: 'Room not found. Start a new room.' }, 404);
-    const room = JSON.parse(row.state);
-    if (room.expiresAt < Date.now()) return response({ error: 'This demo room expired. Start another room.' }, 410);
-    if (match[2] && request.method === 'POST') {
-      const op = await readBody(request);
-      if (room.members.length >= 6) throw new Error('This room already has six shoppers.');
-      const key = crypto.randomUUID(), member = { id: crypto.randomUUID(), name: String(op.name || 'Friend').trim().slice(0, 24) || 'Friend', hash: await digest(key) };
-      room.members.push(member); changed(room); room.version++; log(room, member, 'joined the room');
-      const saved = await env.DB.prepare('UPDATE rooms SET state=? WHERE id=? AND state=?').bind(JSON.stringify(room), room.id, row.state).run();
-      if (!saved.meta.changes) throw conflict();
-      return response({ key, room: view(room, member) }, 201);
+    const deadline = Math.min(...deadlines.filter(Boolean));
+    if (Number.isFinite(deadline))
+      await this.ctx.storage.setAlarm(Math.max(Date.now() + 100, deadline));
+  }
+  broadcast(id) {
+    for (const ws of this.ctx.getWebSockets()) {
+      const c = ws.deserializeAttachment();
+      if (!c?.person || ws.readyState !== 1) continue;
+      try {
+        ws.send(JSON.stringify(stateMessage(this.rooms, id, c.person)));
+      } catch (error) {
+        ws.send(JSON.stringify(errorMessage(error)));
+        ws.close(4004, "Room expired");
+      }
     }
-    const tokenHash = await digest((request.headers.get('Authorization') || '').replace(/^Bearer /, ''));
-    const member = room.members.find(m => m.hash === tokenHash);
-    if (!member) return response({ error: 'Join the room to continue.' }, 401);
-    if (request.method === 'POST') {
-      await limit(env.DB, 'writes:' + member.id, 240, 60000);
-      await update(room, member, await readBody(request));
-      room.version++;
-      // Compare-and-swap applies across Worker isolates, unlike a process-local queue.
-      const saved = await env.DB.prepare('UPDATE rooms SET state=? WHERE id=? AND state=?').bind(JSON.stringify(room), room.id, row.state).run();
-      if (!saved.meta.changes) throw conflict();
-    } else if (request.method !== 'GET') return response({ error: 'Unsupported method' }, 405);
-    return response(view(room, member));
-  } catch (error) {
-    return response({ error: error.message || 'Room request failed.' }, error.status || 400);
+  }
+  async erase() {
+    this.erased = true;
+    for (const ws of this.ctx.getWebSockets())
+      if (ws.readyState === 1) {
+        ws.send(
+          JSON.stringify({
+            type: "error",
+            code: "ROOM_EXPIRED",
+            message: "This room has expired. Start a fresh one together.",
+          }),
+        );
+        ws.close(4004, "Room expired");
+      }
+    await this.ctx.storage.deleteAll();
+  }
+  async fetch(request) {
+    if (this.erased)
+      return failure(
+        new RoomError(
+          "ROOM_EXPIRED",
+          "This room has expired. Start a fresh one together.",
+          410,
+        ),
+      );
+    try {
+      const url = new URL(request.url),
+        id = request.headers.get("x-room-id");
+      if (!id) throw new RoomError("INVALID_LINK", "Invalid invite.", 404);
+      if (url.pathname === "/socket") {
+        this.rooms.require(id);
+        const [client, server] = Object.values(new WebSocketPair());
+        this.ctx.acceptWebSocket(server);
+        server.serializeAttachment({
+          id: crypto.randomUUID(),
+          roomId: id,
+          person: null,
+          created: Date.now(),
+          messages: 0,
+          window: Date.now(),
+          lastActivity: 0,
+        });
+        await this.schedule(id);
+        return new Response(null, { status: 101, webSocket: client });
+      }
+      const response = await roomHttp(
+        this.rooms,
+        id,
+        url.pathname.slice(1),
+        request,
+        this.config,
+      );
+      this.broadcast(id);
+      await this.schedule(id);
+      return response;
+    } catch (error) {
+      if (error.code === "ROOM_EXPIRED" || !this.id()) await this.erase();
+      return failure(error);
+    }
+  }
+  async webSocketMessage(ws, raw) {
+    if (this.erased) {
+      ws.close(4004, "Room expired");
+      return;
+    }
+    const c = ws.deserializeAttachment();
+    try {
+      if (!c)
+        throw new RoomError(
+          "INVALID_SESSION",
+          "Reconnect to restore your session.",
+          401,
+        );
+      if (Date.now() - c.window > 60000) {
+        c.window = Date.now();
+        c.messages = 0;
+      }
+      if (++c.messages > 120)
+        throw new RoomError(
+          "RATE_LIMITED",
+          "Too many connection messages.",
+          429,
+        );
+      const message = parseMessage(raw);
+      if (!c.person) {
+        if (message.type !== "auth" || c.authenticating)
+          throw new RoomError("INVALID_SESSION", "Authenticate first.", 401);
+        c.authenticating = true;
+        ws.serializeAttachment(c);
+        const hash = await tokenHash(message.token);
+        if (ws.readyState !== 1) return;
+        c.person = this.rooms.connect(c.roomId, hash, c.id).id;
+        delete c.authenticating;
+        ws.serializeAttachment(c);
+        this.broadcast(c.roomId);
+      } else if (message.type === "heartbeat" || message.type === "activity") {
+        const activity =
+          message.type === "activity" && Date.now() - c.lastActivity > 1000;
+        this.rooms.heartbeat(c.roomId, c.id, activity);
+        if (activity) {
+          c.lastActivity = Date.now();
+          this.broadcast(c.roomId);
+        } else
+          ws.send(JSON.stringify({ type: "pong", serverTime: Date.now() }));
+        ws.serializeAttachment(c);
+      } else if (message.type === "resync")
+        ws.send(JSON.stringify(stateMessage(this.rooms, c.roomId, c.person)));
+      else throw new RoomError("INVALID_MESSAGE", "Unsupported room message.");
+      await this.schedule(c.roomId);
+    } catch (error) {
+      if (error.code === "ROOM_EXPIRED") {
+        await this.erase();
+        return;
+      }
+      if (ws.readyState === 1) ws.send(JSON.stringify(errorMessage(error)));
+      if ([401, 429].includes(error.status))
+        ws.close(4001, "Reconnect required");
+    }
+  }
+  async webSocketClose(ws) {
+    if (this.erased) return;
+    const c = ws.deserializeAttachment();
+    if (!c?.person) return;
+    this.rooms.disconnect(c.roomId, c.id);
+    this.broadcast(c.roomId);
+    await this.schedule(c.roomId);
+  }
+  async webSocketError(ws) {
+    await this.webSocketClose(ws);
+  }
+  async alarm() {
+    if (this.erased) return;
+    const id = this.id();
+    if (!id) {
+      await this.erase();
+      return;
+    }
+    try {
+      const { stale } = this.rooms.sweep(id);
+      for (const ws of this.ctx.getWebSockets()) {
+        const c = ws.deserializeAttachment();
+        if (
+          (!c?.person && Date.now() - c.created >= 5000) ||
+          stale.includes(c.id)
+        )
+          ws.close(4000, "Connection timed out");
+      }
+      this.broadcast(id);
+      await this.schedule(id);
+    } catch (error) {
+      if (error.code === "ROOM_EXPIRED") await this.erase();
+      else throw error;
+    }
+  }
+}
+export class AbuseObject extends DurableObject {
+  constructor(ctx, env) {
+    super(ctx, env);
+    this.store = objectStore(ctx.storage);
+    ctx.blockConcurrencyWhile(async () => {
+      this.store.run(
+        "CREATE TABLE IF NOT EXISTS abuse_windows(id TEXT PRIMARY KEY,count INTEGER NOT NULL,expires_at INTEGER NOT NULL)",
+      );
+    });
+  }
+  async fetch(request) {
+    try {
+      const bucket = await request.json();
+      consume(this.store, bucket);
+      await this.ctx.storage.setAlarm(bucket.expires);
+      return json({ ok: true });
+    } catch (error) {
+      return failure(error);
+    }
+  }
+  async alarm() {
+    await this.ctx.storage.deleteAll();
   }
 }
 export default {
   async fetch(request, env) {
-    const path = new URL(request.url).pathname;
-    if (path.startsWith('/api/')) return handleApi(request, env);
-    const asset = bundledAssets[path];
-    if (!asset || request.method !== 'GET') return new Response('Not found', { status: 404 });
-    return new Response(Uint8Array.from(atob(asset.data), c => c.charCodeAt(0)), { headers: { ...assetHeaders, 'Content-Type': asset.type } });
-  }
+    try {
+      const url = new URL(request.url);
+      if (!url.pathname.startsWith("/api/")) {
+        const response = await env.ASSETS.fetch(request),
+          headers = new Headers(response.headers);
+        headers.set("Referrer-Policy", "no-referrer");
+        headers.set("X-Content-Type-Options", "nosniff");
+        return new Response(response.body, {
+          status: response.status,
+          headers,
+        });
+      }
+      sameOrigin(request);
+      const config = configuration(env);
+      const create = url.pathname === "/api/rooms" && request.method === "POST";
+      const match = url.pathname.match(
+        /^\/api\/rooms\/([^/]+)(?:\/(join|session|socket))?$/,
+      );
+      if (!create && !match)
+        throw new RoomError("NOT_FOUND", "Page not found.", 404);
+      const bucket = await rateKey(
+        config,
+        request.headers.get("cf-connecting-ip") || "unknown",
+        create ? "create" : "join",
+      );
+      const limited = await env.ABUSE_LIMITS.get(
+        env.ABUSE_LIMITS.idFromName(bucket.id),
+      ).fetch(
+        new Request("https://internal/limit", {
+          method: "POST",
+          body: JSON.stringify(bucket),
+        }),
+      );
+      if (!limited.ok) return limited;
+      const id = create
+          ? crypto.randomUUID()
+          : await verifyInvite(config.secret, match[1]),
+        action = create ? "create" : match[2] || "info";
+      if (
+        action === "socket" &&
+        (request.headers.get("upgrade")?.toLowerCase() !== "websocket" ||
+          request.headers.get("origin") !== url.origin ||
+          url.search)
+      )
+        throw new RoomError(
+          "ORIGIN_DENIED",
+          "Open the room on its own website.",
+          403,
+        );
+      const internal = new URL(request.url);
+      internal.pathname = "/" + action;
+      const headers = new Headers(request.headers);
+      headers.set("x-room-id", id);
+      return await env.ROOMS.get(env.ROOMS.idFromName(id)).fetch(
+        new Request(internal, {
+          method: request.method,
+          headers,
+          body: request.body,
+          redirect: "manual",
+        }),
+      );
+    } catch (error) {
+      return failure(error);
+    }
+  },
 };

@@ -1,20 +1,40 @@
-import { readFile, writeFile, mkdir, cp } from 'node:fs/promises';
-const root = new URL('../', import.meta.url);
-const files = { 'index.html': 'text/html; charset=utf-8', 'app.js': 'text/javascript', 'style.css': 'text/css', 'mobile.css': 'text/css', 'font.woff2': 'font/woff2' };
-const assets = {};
-for (const [file, type] of Object.entries(files)) assets[file === 'index.html' ? '/' : '/' + file] = { data: (await readFile(new URL(file, root))).toString('base64'), type };
-const modules = ['shopify.mjs', 'catalog.mjs', 'room-domain.mjs', 'worker.mjs'];
-let output = '';
-for (const file of modules) {
-  let source = await readFile(new URL(file, root), 'utf8');
-  source = source.replace(/^import .*;\r?\n/gm, '');
-  if (file !== 'worker.mjs') source = source.replace(/export /g, '');
-  output += source + '\n';
+import { mkdir, cp, rm } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+const root = new URL("../", import.meta.url);
+await mkdir(new URL("dist/client/", root), { recursive: true });
+for (const file of [
+  "index.html",
+  "app.js",
+  "style.css",
+  "mobile.css",
+  "font.woff2",
+  "catalog.mjs",
+  "client",
+])
+  await cp(new URL(file, root), new URL("dist/client/" + file, root), {
+    recursive: true,
+  });
+if (!process.argv.includes("--assets-only")) {
+  // Do not leave an older Sites bundle looking like this Worker's entrypoint.
+  await rm(new URL("dist/server/index.js", root), { force: true });
+  const result = spawnSync(
+    process.execPath,
+    [
+      fileURLToPath(new URL("node_modules/wrangler/bin/wrangler.js", root)),
+      "deploy",
+      "--dry-run",
+      "--outdir",
+      "dist/server",
+    ],
+    {
+      cwd: fileURLToPath(root),
+      stdio: "inherit",
+      env: { ...process.env, WRANGLER_SEND_METRICS: "false" },
+    },
+  );
+  if (result.status !== 0) process.exit(result.status || 1);
 }
-output = 'const bundledAssets = ' + JSON.stringify(assets) + ';\n' + output;
-await mkdir(new URL('dist/server/', root), { recursive: true });
-await writeFile(new URL('dist/server/index.js', root), output);
-await mkdir(new URL('dist/.openai/', root), { recursive: true });
-await cp(new URL('.openai/hosting.json', root), new URL('dist/.openai/hosting.json', root));
-await cp(new URL('drizzle/', root), new URL('dist/.openai/drizzle/', root), { recursive: true });
-console.log('Built Worker with shared room logic, embedded assets, and D1 migrations.');
+console.log(
+  "Built coshop Phase 1: client assets + SQLite Durable Objects. Existing Sites deployment unchanged.",
+);
