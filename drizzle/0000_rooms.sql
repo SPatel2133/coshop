@@ -1,0 +1,3 @@
+CREATE TABLE rooms (id TEXT PRIMARY KEY NOT NULL, state TEXT NOT NULL);
+--> statement-breakpoint
+CREATE TABLE quotas (id TEXT PRIMARY KEY NOT NULL, count INTEGER NOT NULL DEFAULT 0);

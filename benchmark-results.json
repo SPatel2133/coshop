@@ -1,0 +1,23 @@
+{
+  "measuredAt": "2026-11-17T05:55:36.587Z",
+  "target": "https://shopping-room-live.valiantartichoke2.chatgpt.site",
+  "samples": 10,
+  "pollingIntervalMs": 1200,
+  "medianMs": 774,
+  "p95Ms": 1039,
+  "minMs": 624,
+  "maxMs": 1039,
+  "samplesMs": [
+    1039,
+    925,
+    815,
+    855,
+    786,
+    762,
+    692,
+    702,
+    643,
+    624
+  ],
+  "method": "One publishing HTTP client and one independently polling HTTP client. Measured from publication start to follower observation on this machine. This is not a browser rendering or load test."
+}
