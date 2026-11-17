@@ -231,6 +231,7 @@ function render() {
     else {
       const link = make('a', 'Open Shopify checkout ↗'); link.href = room.checkout.url; link.target = '_blank'; link.rel = 'noopener';
       box.append(make('strong', 'Your Shopify cart is ready.'), make('p', 'Review delivery, taxes, and payment securely in Shopify.'), link);
+      if (room.storeName === 'hydrogen-preview.myshopify.com') box.append(make('p', 'Shopify demo store. Cart handoff is complete; stop before placing an order.'));
     }
     $('checkout-result').append(box);
   }
@@ -271,6 +272,13 @@ $('approve').onclick = () => action('approve'); $('checkout').onclick = () => ac
 $('invite').onclick = () => { $('invite-url').value = location.origin + '/?room=' + roomId; $('guest-preview').href = location.origin + '/?room=' + roomId + '&guest=1'; $('invite-dialog').showModal(); };
 $('copy-invite').onclick = async () => { try { await navigator.clipboard.writeText(location.href); toast('Invite copied.'); } catch { $('invite-url').select(); toast('Copy the selected link.'); } };
 $('store-button').onclick = () => { if (!room) return toast('Start a room first, then connect your store.'); $('store-dialog').showModal(); };
+$('shopify-demo').onclick = async () => {
+  $('shopify-demo').disabled = true;
+  $('store-error').textContent = 'Loading Shopify’s public demo catalog…';
+  // Public example credentials published in Shopify's Hydrogen documentation.
+  await action('connect', { domain: 'hydrogen-preview.myshopify.com', token: '3b580e70970c4528da70c98e097c2fa0' });
+  $('shopify-demo').disabled = false;
+};
 $('store-form').onsubmit = async event => { event.preventDefault(); event.submitter.disabled = true; $('store-error').textContent = 'Loading collection…'; await action('connect', { domain: $('domain').value, token: $('token').value }); event.submitter.disabled = false; };
 for (const close of document.querySelectorAll('[data-close]')) close.onclick = () => $(close.dataset.close).close();
 if (roomId) {

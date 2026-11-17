@@ -1,0 +1,12 @@
+{
+  "verifiedAt": "2026-11-17T06:09:21.459Z",
+  "target": "https://shopping-room-live.valiantartichoke2.chatgpt.site",
+  "store": "hydrogen-preview.myshopify.com",
+  "productsRetrieved": 12,
+  "variantId": "gid://shopify/ProductVariant/41007289630776",
+  "requestedQuantity": 1,
+  "cartQuantityValidation": "passed",
+  "checkoutHost": "checkout.hydrogen.shop",
+  "source": "https://shopify.dev/docs/api/hydrogen/2026-04",
+  "scope": "Public Shopify Hydrogen demo store. Created a Storefront API cart through the hosted room API. No order or payment was submitted."
+}

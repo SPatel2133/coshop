@@ -31,11 +31,15 @@ Open http://localhost:4193. For a phone on the same Wi-Fi, open http://YOUR-LAPT
 
 ## Shopify handoff
 
-The host can select **Connect Shopify** in a new room before adding shared picks or basket items. Supply a development-store domain and public Storefront API token. Publish products to the associated storefront first. The application rejects common private/Admin token prefixes. Never provide Admin or private tokens.
+The host can select **Connect Shopify** in a new room and then **Try Shopify’s demo store**. This loads real Storefront API products from the public Hydrogen demo store using example public credentials published by Shopify. No account setup is needed. The alternative form accepts your own development-store domain and public Storefront API token. Publish products to the associated storefront first. The application rejects common private/Admin token prefixes. Never provide Admin or private tokens.
 
 The demo retrieves the first 12 products and up to 100 variants per product through Storefront API 2026-10. It supports one currency per room. Prices and availability are rechecked before cart creation. A changed price clears approvals and asks everyone to review. An unavailable item can be removed without losing other room contents. Returned cart quantities are checked against the requested basket before the Shopify checkout URL is shown. Delivery, taxes, and payment are handled by Shopify.
 
-The automated Shopify checks use fixtures. A live development-store checkout has not been verified because no store credentials have been supplied.
+The automated error checks use fixtures. The hosted app was also verified against Shopify’s public Hydrogen demo store, retrieving 12 products, creating a cart with an actual variant, checking the returned quantity, and opening Shopify’s hosted checkout with that same product and variant. No order or payment was submitted. Stop at the handoff for this portfolio demo. The verification report is in [shopify-verification.json](shopify-verification.json). Credentials are the public examples in [Shopify’s Hydrogen documentation](https://shopify.dev/docs/api/hydrogen/2026-04).
+
+```sh
+node scripts/verify-shopify.mjs https://shopping-room-live.valiantartichoke2.chatgpt.site
+```
 
 ## Synchronization and recovery
 
@@ -60,7 +64,7 @@ The build embeds frontend assets and bundles the same room-domain logic used loc
 
 ## Verification
 
-Six automated tests cover the multi-client integration flow, server restart recovery, stale edits, approval invalidation, group capacity, hosted compare-and-swap, token redaction, quotas, invalid browsing selections, and Shopify error/quantity handling.
+Seven automated tests cover the multi-client integration flow, server restart recovery, stale edits, approval invalidation, group capacity, hosted compare-and-swap, token redaction, quotas, invalid browsing selections, Workers fetch binding, and Shopify error/quantity handling.
 
 Browser checks covered hosted product/variant following, follow-mode recovery after refresh, shared sample checkout, and local reconnection after the server was stopped and restarted. Phone-width checks at 390px covered browsing, product selection, adding to the basket, and bottom navigation. A 320px layout check showed no horizontal overflow. These were browser viewport checks, not physical iPhone tests.
 
@@ -74,7 +78,7 @@ node scripts/benchmark.mjs https://shopping-room-live.valiantartichoke2.chatgpt.
 
 The app synchronizes its own catalog, not the external Shop app or arbitrary websites. Voice/video calls stay in the caller's preferred app. Variant text is synchronized, while sample photographs do not change with fictional colour/size choices. Presence reports the current client's connection state, not whether every participant is online.
 
-A merchant launch would additionally need installation/OAuth, store-wide catalog coverage, durable request idempotency, seat recovery and removal, database cleanup, operational monitoring, broader device/load testing, and a verified live-store checkout. This repository is a portfolio demo.
+A merchant launch would additionally need installation/OAuth, store-wide catalog coverage, durable request idempotency, seat recovery and removal, database cleanup, operational monitoring, broader device/load testing, and verification against each merchant’s own store. This repository is a portfolio demo.
 
 ## Design and attribution
 

@@ -11,7 +11,7 @@ export function validatePublicToken(value){
   return token;
 }
 export class ShopifyClient {
-  constructor(domain,token,{fetcher=globalThis.fetch}={}){this.domain=normalizeDomain(domain);this.token=validatePublicToken(token);this.fetcher=fetcher;}
+  constructor(domain,token,{fetcher=(...args)=>globalThis.fetch(...args)}={}){this.domain=normalizeDomain(domain);this.token=validatePublicToken(token);this.fetcher=fetcher;}
   async request(query,variables={}){
     const response=await this.fetcher(`https://${this.domain}/api/${API_VERSION}/graphql.json`,{method:'POST',headers:{'Content-Type':'application/json','X-Shopify-Storefront-Access-Token':this.token},body:JSON.stringify({query,variables}),signal:AbortSignal.timeout(20000)});
     if(!response.ok)throw new Error(`Shopify returned ${response.status}. Check your public token and storefront permissions.`);

@@ -2,6 +2,18 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ShopifyClient } from '../shopify.mjs';
 
+test('default fetch preserves the global receiver required by Workers', async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = function () {
+    assert.equal(this, globalThis);
+    return Promise.resolve(new Response(JSON.stringify({ data: { products: { nodes: [] } } })));
+  };
+  try {
+    const api = new ShopifyClient('example.myshopify.com', 'public-token-1234567890');
+    assert.deepEqual(await api.products(), []);
+  } finally { globalThis.fetch = original; }
+});
+
 const lines = [{ variantId: 'gid://shopify/ProductVariant/123', quantity: 2 }];
 function client(payload, status = 200) {
   return new ShopifyClient('example.myshopify.com', 'public-token-1234567890', {
