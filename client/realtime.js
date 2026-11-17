@@ -21,6 +21,7 @@ export class RoomConnection {
     interval = 20000,
     onState,
     onPresence = () => {},
+    onShopping = () => {},
     onReady = () => {},
     onStatus,
     onError,
@@ -32,12 +33,14 @@ export class RoomConnection {
       interval,
       onState,
       onPresence,
+      onShopping,
       onReady,
       onStatus,
       onError,
       checkSession,
     });
     this.attempt = 0;
+    this.commands = new Map();
     this.stopped = false;
     this.generation = 0;
     this.online = () => this.retry();
@@ -119,7 +122,17 @@ export class RoomConnection {
         if (firstSnapshot) {
           this.onReady();
           this.flushView();
+          this.flushCommands();
         }
+      } else if (message.type === "hold_up" || message.type === "reaction")
+        this.onShopping(message);
+      else if (message.type === "command_ack") {
+        const pending = this.commands.get(message.requestId);
+        if (!pending) return;
+        clearTimeout(pending.timer);
+        this.commands.delete(message.requestId);
+        if (message.ok) pending.resolve(message);
+        else pending.reject(Object.assign(new Error(message.message), message));
       } else if (message.type === "presence") this.onPresence(message);
       else if (message.type === "view_ack") {
         if (this.inFlightView?.requestId !== message.requestId) return;
@@ -177,6 +190,39 @@ export class RoomConnection {
     }
     return false;
   }
+  command(type, payload) {
+    if (!this.ready || this.stopped)
+      return Promise.reject(new Error("Reconnect before sharing a find."));
+    if (!["hold_up", "react"].includes(type))
+      return Promise.reject(new Error("Unsupported shopping action."));
+    const message = { ...payload, type, requestId: navigationId() };
+    return new Promise((resolve, reject) => {
+      const pending = { message, resolve, reject, expires: Date.now() + 15000 };
+      this.commands.set(message.requestId, pending);
+      this.sendCommand(pending);
+    });
+  }
+  sendCommand(pending) {
+    clearTimeout(pending.timer);
+    if (Date.now() >= pending.expires) {
+      this.commands.delete(pending.message.requestId);
+      pending.reject(
+        new Error(
+          "Couldn’t confirm that action. Reconnect to check the shared bag before trying again.",
+        ),
+      );
+      return;
+    }
+    // An acknowledgement may be lost after the server commits. Keep its ID.
+    this.send(pending.message);
+    pending.timer = setTimeout(
+      () => this.sendCommand(pending),
+      Math.min(3000, pending.expires - Date.now()),
+    );
+  }
+  flushCommands() {
+    for (const pending of this.commands.values()) this.sendCommand(pending);
+  }
   setView(view) {
     this.desiredView = { type: "view", requestId: navigationId(), view };
     this.flushView();
@@ -226,6 +272,11 @@ export class RoomConnection {
     clearInterval(this.heartbeatTimer);
     this.clearViewTimers();
     this.inFlightView = null;
+    for (const pending of this.commands.values()) {
+      clearTimeout(pending.timer);
+      pending.reject(new Error("The shopping session ended."));
+    }
+    this.commands.clear();
     this.socket?.close();
     removeEventListener("online", this.online);
     removeEventListener("offline", this.offline);

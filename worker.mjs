@@ -1,6 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import schema from "./drizzle/room-object/0001_rooms.sql";
 import presenceSchema from "./drizzle/room-object/0002_presence.sql";
+import holdUpSchema from "./drizzle/room-object/0003_hold_ups.sql";
 import { configuration, RoomError } from "./server/config.js";
 import { verifyInvite, tokenHash, sameOrigin } from "./server/security.js";
 import { objectStore, migrate } from "./server/storage.js";
@@ -26,6 +27,7 @@ export class RoomObject extends DurableObject {
     ctx.blockConcurrencyWhile(async () => {
       migrate(this.store, schema);
       migrate(this.store, presenceSchema, 2);
+      migrate(this.store, holdUpSchema, 3);
     });
     this.rooms = new Rooms(this.store, this.config);
     this.presenceCache = new Map();
@@ -176,6 +178,15 @@ export class RoomObject extends DurableObject {
         if (ack.accepted) this.broadcast(c.roomId, true);
         ws.send(JSON.stringify(ack));
         ws.serializeAttachment(c);
+      } else if (message.type === "hold_up" || message.type === "react") {
+        const result = this.rooms.shopCommand(c.roomId, c.id, message);
+        if (result.notification) {
+          for (const peer of this.ctx.getWebSockets())
+            if (peer.deserializeAttachment()?.person && peer.readyState === 1)
+              peer.send(JSON.stringify(result.notification));
+          this.broadcast(c.roomId, true);
+        }
+        ws.send(JSON.stringify(result.ack));
       } else if (message.type === "resync")
         ws.send(JSON.stringify(stateMessage(this.rooms, c.roomId, c.person)));
       else throw new RoomError("INVALID_MESSAGE", "Unsupported room message.");

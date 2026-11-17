@@ -36,5 +36,5 @@ if (!process.argv.includes("--assets-only")) {
   if (result.status !== 0) process.exit(result.status || 1);
 }
 console.log(
-  "Built coshop Phase 2: presence, client assets + SQLite Durable Objects. Existing Sites deployment unchanged.",
+  "Built coshop Phase 3: ordered finds, shared bag + SQLite Durable Objects. Existing Sites deployment unchanged.",
 );

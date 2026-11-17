@@ -19,6 +19,10 @@ const schema = await readFile(
   "utf8",
 );
 const secret = "test-only-secret-with-at-least-32-characters";
+const holdUpSchema = await readFile(
+  new URL("../drizzle/room-object/0003_hold_ups.sql", import.meta.url),
+  "utf8",
+);
 const presenceSchema = await readFile(
   new URL("../drizzle/room-object/0002_presence.sql", import.meta.url),
   "utf8",
@@ -29,6 +33,7 @@ function setup(t, env = {}) {
   const store = nodeStore(db);
   migrate(store, schema);
   migrate(store, presenceSchema, 2);
+  migrate(store, holdUpSchema, 3);
   let now = 1000000;
   const config = configuration({ INVITE_SIGNING_SECRET: secret, ...env }),
     rooms = new Rooms(store, config, () => now);
@@ -207,5 +212,5 @@ test("schema migration is repeatable and does not erase existing rooms", (t) => 
   rooms.create(id, { name: "Maya", avatar: "sage" }, "maya");
   migrate(store, schema);
   assert.equal(rooms.snapshot(id).participants[0].name, "Maya");
-  assert.equal(store.all("SELECT * FROM schema_migrations").length, 2);
+  assert.equal(store.all("SELECT * FROM schema_migrations").length, 3);
 });

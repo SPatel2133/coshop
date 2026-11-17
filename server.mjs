@@ -64,6 +64,14 @@ migrate(
   2,
 );
 const presenceCache = new Map();
+migrate(
+  store,
+  await readFile(
+    new URL("drizzle/room-object/0003_hold_ups.sql", root),
+    "utf8",
+  ),
+  3,
+);
 const rooms = new Rooms(store, config),
   clients = new Map();
 const wsServer = new WebSocketServer({ noServer: true, maxPayload: 2048 });
@@ -74,7 +82,7 @@ const assets = new Map([
   ["/mobile.css", ["mobile.css", "text/css"]],
   ["/font.woff2", ["font.woff2", "font/woff2"]],
   ["/catalog.mjs", ["catalog.mjs", "text/javascript"]],
-  ...["rooms", "session", "realtime", "presence"].map((n) => [
+  ...["rooms", "session", "realtime", "presence", "hold-ups"].map((n) => [
     "/client/" + n + ".js",
     ["client/" + n + ".js", "text/javascript"],
   ]),
@@ -245,6 +253,19 @@ server.on("upgrade", async (req, socket, head) => {
             );
             if (ack.accepted) broadcast(roomId, true);
             ws.send(JSON.stringify(ack));
+          } else if (message.type === "hold_up" || message.type === "react") {
+            const result = rooms.shopCommand(roomId, c.id, message);
+            if (result.notification) {
+              for (const [peer, member] of clients)
+                if (
+                  member.roomId === roomId &&
+                  member.person &&
+                  peer.readyState === 1
+                )
+                  peer.send(JSON.stringify(result.notification));
+              broadcast(roomId, true);
+            }
+            ws.send(JSON.stringify(result.ack));
           } else if (message.type === "resync")
             ws.send(JSON.stringify(stateMessage(rooms, roomId, c.person)));
           else
@@ -292,7 +313,7 @@ server.listen(
   Number(process.env.PORT || 4193),
   process.env.HOST || "0.0.0.0",
   () =>
-    console.log("coshop Phase 2: http://localhost:" + server.address().port),
+    console.log("coshop Phase 3: http://localhost:" + server.address().port),
 );
 function shutdown() {
   clearInterval(sweep);

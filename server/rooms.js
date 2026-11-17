@@ -2,6 +2,7 @@ import { RoomError } from "./config.js";
 import { displayName, avatar, roomName, uniqueName } from "./participants.js";
 import { newToken, digest, tokenHash, makeInvite } from "./security.js";
 import { Events } from "./events.js";
+import { HoldUps } from "./hold-ups.js";
 import { catalog } from "../catalog.mjs";
 export const json = (data, status = 200, headers = {}) =>
   new Response(JSON.stringify(data), {
@@ -90,11 +91,13 @@ export class Rooms {
   constructor(store, config, clock = Date.now, products = catalog) {
     Object.assign(this, { store, config, clock });
     this.events = new Events(store, products);
+    this.holdUps = new HoldUps(store, products);
   }
   row(id) {
     return this.store.all("SELECT * FROM room_records WHERE id=?", id)[0];
   }
   delete(id) {
+    this.store.run("DELETE FROM bag_lines WHERE room_id=?", id);
     this.store.run("DELETE FROM events WHERE room_id=?", id);
     this.store.run("DELETE FROM connections WHERE room_id=?", id);
     this.store.run("DELETE FROM participants WHERE room_id=?", id);
@@ -366,6 +369,71 @@ export class Rooms {
       return { type: "view_ack", requestId, ...result };
     });
   }
+  shopCommand(id, connectionId, message) {
+    const now = this.clock();
+    this.require(id, now);
+    const connection = this.store.all(
+      "SELECT * FROM connections WHERE room_id=? AND id=? AND last_seen_at>?",
+      id,
+      connectionId,
+      now - this.config.heartbeatTimeout,
+    )[0];
+    if (!connection)
+      throw new RoomError(
+        "SESSION_DISCONNECTED",
+        "Reconnect to restore your session.",
+        401,
+      );
+    try {
+      return this.store.transaction(() => {
+        const result = this.holdUps.append(
+          id,
+          connection.participant_id,
+          message,
+          now,
+        );
+        if (!result.replay) {
+          this.store.run(
+            "UPDATE connections SET last_activity_at=? WHERE id=?",
+            now,
+            connectionId,
+          );
+          this.bump(id, now, true);
+        }
+        const bag = this.holdUps.bag(id);
+        return {
+          ack: {
+            type: "command_ack",
+            requestId: message.requestId,
+            ok: true,
+            event: result.event,
+            bag,
+          },
+          notification: result.replay
+            ? null
+            : {
+                type: message.type === "hold_up" ? "hold_up" : "reaction",
+                event: result.event,
+                bag,
+                version: this.row(id).version,
+                serverTime: now,
+              },
+        };
+      });
+    } catch (error) {
+      if (!error.code) throw error;
+      return {
+        ack: {
+          type: "command_ack",
+          requestId: message.requestId,
+          ok: false,
+          code: error.code,
+          message: error.message,
+          retryAfterMs: error.retryAfterMs,
+        },
+      };
+    }
+  }
   snapshot(id) {
     const now = this.clock(),
       room = this.require(id, now);
@@ -399,6 +467,8 @@ export class Rooms {
       expiresAt: room.last_active_at + this.config.ttl,
       capacity: 6,
       participants,
+      bag: this.holdUps.bag(id),
+      holdUps: this.holdUps.recent(id, now),
       serverTime: now,
     };
   }

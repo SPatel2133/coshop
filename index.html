@@ -173,6 +173,9 @@
           <p id="room-description">Wander a little. You’re in good company.</p>
         </div>
         <div class="room-tools">
+          <span id="bag-count" class="bag-receipt" role="status"
+            >Shared bag · 0</span
+          >
           <span id="connection" class="connection">Connecting…</span
           ><button id="invite" class="secondary">Invite your people ↗</button>
         </div>
@@ -216,7 +219,7 @@
             <p class="eyebrow">The sample collection</p>
             <h2>A few things to wander through.</h2>
           </div>
-          <span class="sample-badge">Sample products · browsing only</span>
+          <span class="sample-badge">Sample products · no checkout</span>
         </div>
         <nav
           id="category-filters"
@@ -226,10 +229,23 @@
         <div id="products" class="product-grid"></div>
         <p class="fine catalog-disclosure">
           A sample collection to wander through together. These products cannot
-          be purchased. Hold up and the shared bag arrive in later phases.
+          be purchased. Hold up a find to share it and save it once in your bag.
+          Bag editing and Shopify checkout arrive in later phases.
         </p>
       </section>
     </main>
+    <aside
+      id="hold-up-popup"
+      class="hold-up-popup"
+      aria-labelledby="find-heading"
+      hidden
+    ></aside>
+    <p
+      id="find-announcement"
+      class="sr-only"
+      role="status"
+      aria-live="polite"
+    ></p>
     <dialog id="invite-dialog">
       <button
         class="close"

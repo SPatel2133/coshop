@@ -1,8 +1,52 @@
-# coshop · Phase 2
+# coshop · Phase 3
 
-A shared shopping room for friends already on a call. This phase adds live product/category presence, away states, Peek, Join, and nearby shopper avatars on top of the secure six-seat rooms. Everyone has equal permissions. Keep Discord or FaceTime open; coshop does not provide calling.
+A shared shopping room for friends already on a call. Hold up a find: everyone gets an ordered popup, can react or take a closer look, and the variant is saved once in a shared sample bag. Everyone has equal permissions and browses independently. Keep Discord or FaceTime open; coshop does not provide calling.
 
-**Current source:** Phase 2, runnable locally with Node or Cloudflare's local runtime. **Direct Workers deployment is not configured.** A temporary public HTTPS tunnel can expose the Node preview while the laptop stays running. The previous [Sites demo](https://coshop.valiantartichoke2.chatgpt.site) remains an older build; it does not demonstrate this phase.
+**Current source:** Phase 3, runnable locally with Node or Cloudflare's local runtime. **Direct Workers deployment is not configured.** A temporary public HTTPS tunnel can expose the Node preview while the laptop stays running. The previous [Sites demo](https://coshop.valiantartichoke2.chatgpt.site) remains an older build; it does not demonstrate this phase.
+
+![A repeated find preserves the original picker and quantity](docs/phase3-hold-up.jpg)
+
+## Phase 3: try it with three windows
+
+Use **http://localhost:4195**, or your currently running public tunnel. Refresh existing pages to load this phase. Both Node and Cloudflare apply migration 3 automatically; rooms, identities and Phase 2 navigation survive.
+
+1. Create a room as **Maya**. Open **Invite your people → Testing on one browser?** and the two demo links for **Sam** and **Priya**. Ordinary tabs share one identity; demo links have independent session storage.
+2. Let Sam browse **Time well spent / Tan**, and Priya browse **Wear**. In Maya's tab open **A little quiet / Black** and press **Hold up**. All three receive the same image, product, exact variant, sample price and Maya's name. The bag becomes **1**; Sam and Priya's underlying pages stay put.
+3. Click a reaction in Priya's popup. It floats briefly on devices currently showing that find. There are no counts, votes, approvals or verdicts. Interacting pauses the popup; otherwise it closes after eight seconds. **Dismiss** leaves the underlying page alone; **View** navigates only that shopper to the exact variant.
+4. While Priya keeps the first popup open, have Maya and Sam hold up different variants. Priya sees **more waiting**, then the finds in server order as she dismisses them. Each new popup gets its own eight seconds; interaction keeps it open until dismissed/viewed.
+5. From Sam's tab hold up Maya's original headphones variant. Bag quantity and original picker stay unchanged. The popup says **Already in the bag · picked by Maya · quantity 1** and **Held up again by Sam**. Repeat attribution appears only in that popup. A three-second server cooldown applies to one person across all their tabs.
+6. Refresh or interrupt a connection. The full snapshot restores the bag and recent unseen finds, without replaying dismissed ones in the same tab. Existing members recover up to two minutes / 128 recent hold-ups; a fresh participant sees only finds from the last eight seconds. Reactions are transient and are not replayed.
+7. Check on a phone or a 390px/320px viewport. The nonmodal card fits above the bottom edge and stays scrollable on short screens. Use View, Dismiss, reactions and the ordinary browsing controls. Sound stays muted/absent on every device.
+
+**Done looks like:** three shoppers receive ordered finds; repeats never increase quantity or change ownership; reconnect restores authoritative state; other shoppers never get navigated without choosing View/Join.
+
+## Phase 3 implementation
+
+Kept the vanilla frontend, neutral Jakarta typography, ASCII landing artwork, sample catalog, secure room/session flow, independent browsing, Peek/Join, presence strip, SQLite adapters and both runtimes. No React rewrite, new account or paid service.
+
+New files: `server/hold-ups.js`, `client/hold-ups.js`, `drizzle/room-object/0003_hold_ups.sql`, four `tests/phase3-*.test.mjs` files and two browser screenshots. Extended `server/rooms.js`, `server.mjs`, `worker.mjs`, `client/realtime.js`, `app.js`, `index.html`, `style.css`, test/build scripts and the earlier domain test setups. Migrations 1 and 2 remain unchanged. No Phase 4 UI files were created.
+
+The server commits canonical `hold_up` events and first-pick `add_to_bag` events together with the `bag_lines` projection. A room transaction orders concurrent requests; `(room_id, variant_id)` prevents duplicates. Retried commands reuse a UUID and return the committed result without another mutation/broadcast. Request IDs cannot be repurposed across people, rooms, event types or payloads. Business rejections return nonfatal command acknowledgements. The client retries unacknowledged commands for up to 15 seconds with the same ID, then tells the shopper to reconnect/check the bag before retrying manually.
+
+Reactions use the same event log, are allowlisted to ❤️ / 👎 / 🤔, and have a separate 500ms server cooldown. They target a recent hold-up in the same room; no aggregate score is calculated. Product identity, pricing, availability and picker details come from the server catalog, never submitted client metadata. Unavailable sample variants can be discussed/saved, visibly labelled unavailable; they cannot be purchased.
+
+The queue runs independently on each device, deduplicates live events and snapshots, and stores only a completed sequence cursor in that tab's session storage. It never steals focus on arrival. Keyboard focus and pointer interaction stop auto-dismiss. View changes only the local shopper's location. Offline sharing is disabled; room expiry removes the popup as well as all server bag/event/participant records.
+
+**Scope boundary:** the sample bag has a synchronized read-only quantity badge and per-find receipt. Bag drawer, explicit Add to bag, quantity edits, removal and checkout coordination belong to Phase 4. Live Shopify catalog/cart handoff belongs to Phase 5. This phase makes no live Shopify requests.
+
+Phase 3 acceptance checks:
+
+| Check                                   | Result                                                                                                        |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Concurrent hold-ups, both real runtimes | All three clients received the same event order within one second locally; same variant produced one bag line |
+| Repeats and retries                     | Original picker/quantity retained; committed request replay produces no extra event, popup or addition        |
+| Three browser tabs                      | Shared finds, queued finds, floating reaction, independent browsing and exact-variant View verified           |
+| Phone viewports                         | 320px and 390px, popup fully inside the viewport and all actions reachable; not a physical iPhone test        |
+| Public tunnel                           | Two authenticated WSS clients exchanged a hold-up and synchronized bag quantity through HTTPS                 |
+| Reconnect, cleanup and validation       | Covered in domain, queue, client and actual Node/Cloudflare transport tests                                   |
+| Build and regressions                   | Worker build plus all 51 automated checks pass                                                                |
+
+![Phone repeat-find popup](docs/phase3-phone.jpg)
 
 ![Live presence while browsing independently](docs/phase2-peek.jpg)
 
@@ -64,7 +108,7 @@ Phase 2 file changes:
 | `tests/phase1-domain.test.mjs`, `tests/phase1-transport.test.mjs`                               | Run foundation checks against the migrated schema; original acceptance assertions retained            |
 | `package.json`, `.github/workflows/check.yml`, `scripts/build.mjs`, `.env.example`, `README.md` | Full checks, build label, documented idle configuration and this handoff                              |
 
-`0001_rooms.sql` is unchanged. No Phase 3 Hold up/bag feature files were added. No new API vendor or paid service was introduced.
+This section records the preceding Phase 2 work. Its presence and browsing behavior remain in Phase 3.
 
 ## Run with Node
 
@@ -79,7 +123,7 @@ Open **http://localhost:4193**. The handoff preview in the current workspace use
 
 The server binds to `0.0.0.0` for testing with phones on the same Wi-Fi. Open `http://YOUR-LAPTOP-WIFI-IP:4193` on both devices, substituting the chosen port. Keep the laptop running. Setting `HOST=127.0.0.1` restricts it to this computer. Clipboard access may be unavailable on a plain-HTTP phone connection; the invitation field supports selecting and copying manually.
 
-No account or Shopify key is needed for Phase 2. Local data lives in ignored `data/phase1/rooms.sqlite`, separate from the old demo database. A random signing key is generated once in ignored `data/phase1/server-key` unless you supply `INVITE_SIGNING_SECRET`. Keep that key stable across restarts so existing invitations continue to verify. Do not commit it.
+No account or Shopify key is needed for Phase 3. Local data lives in ignored `data/phase1/rooms.sqlite`, separate from the old demo database. A random signing key is generated once in ignored `data/phase1/server-key` unless you supply `INVITE_SIGNING_SECRET`. Keep that key stable across restarts so existing invitations continue to verify. Do not commit it.
 
 Optionally copy `.env.example` to `.env`. Empty `INVITE_SIGNING_SECRET` uses the generated local key. `DATA_DIR` can select another local database directory.
 
@@ -104,7 +148,7 @@ pnpm test
 node --test tests/shopify.test.mjs
 ```
 
-`pnpm test` runs all 37 checks. It exercises the shared domain against SQLite and runs actual HTTP/WebSocket clients against **both Node and Wrangler's local Durable Object runtime**, including a race for the last seat. It does not replace Cloudflare with an in-memory fake. Tests use disposable databases and require ports 14294–14297 and 14304–14305 to be available.
+`pnpm test` runs all 51 checks. It exercises the shared domain against SQLite and runs actual HTTP/WebSocket clients against **both Node and Wrangler's local Durable Object runtime**, including a race for the last seat and concurrent hold-ups. It does not replace Cloudflare with an in-memory fake. Tests use disposable databases and require ports 14294–14297, 14304–14305 and 14314–14315 to be available, plus each Wrangler port +1000 for its inspector.
 
 Room foundation acceptance results, retained in this build:
 
@@ -123,7 +167,7 @@ Room foundation acceptance results, retained in this build:
 | Browser responsive checks                   | 390px and 320px, no horizontal overflow; not physical iPhone testing                               |
 | Build                                       | Worker bundle and static assets build successfully                                                 |
 
-There are **17 room-foundation tests**, **15 Phase 2 tests**, and **5 existing Shopify-client regression tests**. Shopify regressions use fixtures; they are not a live Shopify verification of this phase. GitHub Actions installs dependencies, builds the Worker, then runs these checks.
+There are **17 room-foundation tests**, **15 Phase 2 tests**, **14 Phase 3 tests**, and **5 existing Shopify-client regression tests**. Shopify regressions use fixtures; they are not a live Shopify verification of this phase. GitHub Actions installs dependencies, builds the Worker, then runs these checks.
 
 ## Data and concurrency
 
@@ -131,9 +175,9 @@ Production target: **one SQLite-backed Durable Object per room**, with hibernati
 
 The Node adapter uses built-in `node:sqlite`, the same SQL schema, and `BEGIN IMMEDIATE` transactions. Room metadata is in `room_records`; identities in `participants`; live connection leases in `connections`. Only display names and the optional room title are user-entered text. Avatars are preset identifiers. There are no emails, accounts, recordings, raw stored IP addresses, or user-agent profiles. Logs do not record bodies or tokens; direct Cloudflare observability is disabled in the configuration.
 
-Migrations: [`0001_rooms.sql`](drizzle/room-object/0001_rooms.sql) and the new [`0002_presence.sql`](drizzle/room-object/0002_presence.sql). They run at Node startup / object initialization and record schema versions 1 and 2. Version 2 adds the shared event log and a separate connection activity timestamp; it preserves existing rooms and token hashes. Future changes need new migrations, not edits to an applied version. `wrangler.jsonc` also declares the `v1-rooms` SQLite class migration. Original D1 SQL files/journal remain unchanged for the legacy deployment.
+Migrations: [`0001_rooms.sql`](drizzle/room-object/0001_rooms.sql), [`0002_presence.sql`](drizzle/room-object/0002_presence.sql) and [`0003_hold_ups.sql`](drizzle/room-object/0003_hold_ups.sql). They run at Node startup / object initialization and record schema versions 1–3. Version 2 adds the shared event log and a separate connection activity timestamp. Version 3 adds the bag projection and a room/event index; existing rooms, token hashes and events survive. Future changes need new migrations, not edits to an applied version. `wrangler.jsonc` also declares the `v1-rooms` SQLite class migration. Original D1 SQL files/journal remain unchanged for the legacy deployment.
 
-Room activity means creation, a new join, or a throttled actual interaction in the room. Heartbeats, reconnect attempts, snapshots and avatar connection updates do not keep an abandoned room alive. Room expiry deletes application records; Durable Object expiry also deletes the object's storage. No expired participant/event archive or identity-bearing tombstone is retained. The `events` table now stores append-only `view` events with room/user/product/variant IDs, a canonical JSON payload and server timestamp. Presence is derived from each participant’s latest view. Event records are deleted with the room. Later event types are reserved in the schema but are not implemented by Phase 2.
+Room activity means creation, a new join, or a throttled actual interaction in the room. Heartbeats, reconnect attempts, snapshots and avatar connection updates do not keep an abandoned room alive. Room expiry deletes application records; Durable Object expiry also deletes the object's storage. No expired participant/event archive or identity-bearing tombstone is retained. The `events` table stores append-only `view`, `hold_up`, automatic `add_to_bag`, and `react` events with room/user/product/variant IDs, canonical JSON payloads and server timestamps. Presence is derived from each participant’s latest view. All bag lines and events are deleted with the room.
 
 A valid signed invitation to an absent room produces **expired**; a forged/malformed invitation produces **invalid**. This distinction needs no expired-user records. Node performs periodic cleanup; Durable Objects use alarms. Access is denied at the expiry deadline even if background cleanup runs slightly later.
 
@@ -211,7 +255,7 @@ Why Durable Objects rather than Supabase: one authoritative room object naturall
 
 ## Shopify and later phases
 
-Phase 2 displays the clearly labelled sample catalog. Product/category/variant presence, Peek, Join and nearby avatars are implemented. Hold up, the bag, Shopify checkout and recap are **not implemented by this phase**. No inert purchase controls pretend otherwise. Sound remains absent/muted.
+Phase 3 displays the clearly labelled sample catalog. Presence, Peek/Join, nearby avatars, Hold up, ordered popups, floating reactions and automatic shared sample-bag additions are implemented. Bag editing, live Shopify checkout and recap remain later phases. Sound remains absent/muted.
 
 `catalog.mjs`, the reusable Shopify client and legacy storefront domain source are retained. The client now requires an explicit API version; the application config reads all four Shopify values from the environment. The public Hydrogen store can be configured using the public example credentials in [Shopify's official Hydrogen documentation](https://shopify.dev/docs/api/hydrogen/2026-04); they are not embedded in application code. Live catalog caching, country-context pricing, cart warnings and checkout will be wired and verified in Phase 5.
 

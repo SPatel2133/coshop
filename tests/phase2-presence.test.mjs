@@ -8,7 +8,7 @@ import { configuration } from "../server/config.js";
 import { presenceChanges } from "../server/realtime.js";
 import { resolveLocation } from "../client/presence.js";
 const schemas = await Promise.all(
-  ["0001_rooms.sql", "0002_presence.sql"].map((name) =>
+  ["0001_rooms.sql", "0002_presence.sql", "0003_hold_ups.sql"].map((name) =>
     readFile(
       new URL("../drizzle/room-object/" + name, import.meta.url),
       "utf8",

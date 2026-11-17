@@ -16,6 +16,7 @@ import {
 import { RoomConnection } from "./client/realtime.js";
 import { catalog } from "./catalog.mjs";
 import { Presence, resolveLocation } from "./client/presence.js";
+import { HoldUpsUI } from "./client/hold-ups.js";
 let invite = new URLSearchParams(location.search).get("room"),
   connection,
   session,
@@ -30,10 +31,20 @@ const presence = new Presence(catalog, (destination) => {
     openProduct(destination.product, destination.variant.id);
   else showCollection(destination.category || "All");
 });
+const finds = new HoldUpsUI({
+  command: (type, payload) => connection.command(type, payload),
+  view: (productId, variantId) => {
+    const product = catalog.find((p) => p.id === productId);
+    if (product) openProduct(product, variantId);
+    else toast("That product is no longer in the collection.");
+  },
+  error: toast,
+});
 function receiveRoom(room) {
   roomState = room;
   renderRoom(room, session.me);
   presence.setRoom(room, session.me);
+  finds.snapshot(room, session.me);
   $("first-friend").hidden =
     Boolean(selectedProduct) ||
     room.participants.filter((p) => p.connected).length > 1;
@@ -84,6 +95,16 @@ function toast(message) {
   toastTimer = setTimeout(() => ($("toast").hidden = true), 5000);
 }
 function onError(error) {
+  if (
+    [
+      "INVALID_SESSION",
+      "ROOM_FULL",
+      "ROOM_EXPIRED",
+      "INVALID_LINK",
+      "RATE_LIMITED",
+    ].includes(error.code)
+  )
+    finds.deactivate();
   if (error.code === "INVALID_SESSION") {
     connection?.stop();
     clearSession(invite);
@@ -142,11 +163,13 @@ function connected(result) {
       presence.setRoom(roomState, session.me);
     },
     onReady: () => connection.setView(localView),
+    onShopping: (message) => finds.message(message),
     onStatus: (healthy) => {
       $("connection").textContent = healthy ? "Connected" : "Reconnecting…";
       $("connection").classList.toggle("disconnected", !healthy);
       $("reconnect-notice").hidden = healthy;
       presence.setConnected(healthy);
+      finds.setConnected(healthy);
     },
     onError,
     checkSession: () =>
@@ -350,10 +373,14 @@ function openProduct(
     availability,
     make(
       "p",
-      "Sample preview only. Shopping features arrive in the next phases.",
+      "Hold up shares this variant with everyone and adds it once to your shared bag. Sample products cannot be purchased.",
       "fine",
     ),
   );
+  const hold = make("button", "Hold up ✋", "primary hold-up-button");
+  hold.type = "button";
+  copy.insertBefore(hold, copy.lastElementChild);
+  finds.attachButton(hold, product, () => select.value);
   detail.append(img, copy);
   $("product-dialog").hidden = false;
   $("collection-page").hidden = true;
