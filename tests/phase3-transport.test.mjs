@@ -5,7 +5,7 @@ import { launch, api, socket, delay } from "./support/rooms.mjs";
 for (const worker of [false, true])
   test(
     (worker ? "Cloudflare" : "Node") +
-      ": concurrent finds have one order, one bag line, live reactions and reconnect recovery",
+      ": concurrent shares converge on one card per variant, leave the bag untouched and restore persistent finds",
     { timeout: 60000 },
     async (t) => {
       const { base } = await launch(t, worker, {
@@ -65,16 +65,23 @@ for (const worker of [false, true])
         );
       const snapshot = (await api(base, path + "/session", {}, maya.token)).data
         .room;
-      assert.equal(snapshot.bag.items.length, 2);
-      assert.equal(snapshot.bag.totalQuantity, 2);
-      const original = snapshot.bag.items.find((l) => l.productId === "audio")
-        .pickedBy.id;
-      const audioEvents = snapshot.holdUps.filter(
-        (e) => e.productId === "audio",
-      );
+      assert.equal(snapshot.bag.items.length, 0);
+      assert.equal(snapshot.bag.totalQuantity, 0);
+      assert.equal(snapshot.bag.revision, 0);
+      assert.equal(snapshot.finds.length, 2);
+      const original = snapshot.finds.find((f) => f.productId === "audio")
+        .sharedBy.id;
+      const audioEvents = clients[0].messages
+        .filter((m) => m.type === "hold_up" && m.event.productId === "audio")
+        .map((m) => m.event);
       assert.equal(audioEvents[0].repeated, false);
       assert.equal(audioEvents[1].repeated, true);
-      assert.equal(audioEvents[1].pickedBy.id, original);
+      assert.equal(
+        clients[0].messages.find(
+          (m) => m.type === "hold_up" && m.event.id === audioEvents[1].id,
+        ).find.sharedBy.id,
+        original,
+      );
       // Replay a committed command: no additional popup or bag change.
       clients[0].ws.send(JSON.stringify(messages[0]));
       await delay(80);
@@ -108,11 +115,8 @@ for (const worker of [false, true])
       const resync = await recovered.wait(
         (m) => m.type === "state" && m.me === priya.me,
       );
-      assert.equal(resync.room.bag.totalQuantity, 2);
-      assert.deepEqual(
-        resync.room.holdUps.map((e) => e.id),
-        order,
-      );
+      assert.equal(resync.room.bag.totalQuantity, 0);
+      assert.deepEqual(resync.room.finds, snapshot.finds);
       await delay(Math.max(0, before + 3100 - Date.now()));
       const repeat = { ...messages[0], requestId: crypto.randomUUID() };
       clients[0].ws.send(JSON.stringify(repeat));
@@ -120,7 +124,13 @@ for (const worker of [false, true])
         (m) => m.type === "hold_up" && m.event.id === repeat.requestId,
       );
       assert.equal(again.event.repeated, true);
-      assert.equal(again.event.pickedBy.id, original);
-      assert.equal(again.bag.totalQuantity, 2);
+      assert.equal(again.find.sharedBy.id, original);
+      assert.equal(again.bag.totalQuantity, 0);
+      const final = (await api(base, path + "/session", {}, maya.token)).data
+        .room;
+      assert.deepEqual(
+        final.finds.map((f) => f.id),
+        snapshot.finds.map((f) => f.id),
+      );
     },
   );

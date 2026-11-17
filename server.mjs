@@ -72,6 +72,14 @@ migrate(
   ),
   3,
 );
+migrate(
+  store,
+  await readFile(
+    new URL("drizzle/room-object/0004_shared_finds.sql", root),
+    "utf8",
+  ),
+  4,
+);
 const rooms = new Rooms(store, config),
   clients = new Map();
 const wsServer = new WebSocketServer({ noServer: true, maxPayload: 2048 });

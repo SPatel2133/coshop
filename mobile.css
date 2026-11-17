@@ -453,3 +453,82 @@
 .comparison-card button {
   min-height: 44px;
 }
+/* The same finds panel moves into a native modal; it is never auto-opened. */
+@media (max-width: 1179px) {
+  .room-tools {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  dialog.finds-drawer {
+    position: fixed;
+    inset: auto 0 0 auto;
+    margin: 0;
+    width: min(420px, 100%);
+    max-width: 100%;
+    height: min(760px, 94dvh);
+    max-height: 100dvh;
+    padding: 0;
+    border: 0;
+    border-radius: 16px 0 0 0;
+    background: #f4f4ed;
+    overflow: hidden;
+  }
+  .finds-drawer::backdrop {
+    background: #20251b66;
+    backdrop-filter: blur(3px);
+  }
+  .finds-drawer .finds-panel {
+    width: 100%;
+    height: 100%;
+    border: 0;
+    border-radius: 0;
+    padding: max(18px, env(safe-area-inset-top))
+      max(16px, env(safe-area-inset-right))
+      max(12px, env(safe-area-inset-bottom))
+      max(16px, env(safe-area-inset-left));
+  }
+  .finds-close {
+    min-height: 42px;
+    min-width: 60px;
+    font-size: 12px;
+    padding: 8px;
+  }
+  html.finds-modal-open {
+    overflow: hidden;
+  }
+  .finds-modal-open body {
+    position: fixed;
+    top: var(--drawer-scroll-top);
+    left: 0;
+    width: 100%;
+    overflow: hidden;
+  }
+}
+@media (max-width: 360px) {
+  .finds-drawer .finds-panel {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+  .find-reactions {
+    gap: 3px;
+  }
+  .shared-find-actions .find-view {
+    padding: 8px;
+  }
+  .finds-heading h2 {
+    font-size: 23px;
+  }
+}
+@media (max-height: 480px) {
+  dialog.finds-drawer {
+    height: 100dvh;
+    border-radius: 0;
+  }
+  .finds-panel .finds-intro {
+    margin: 6px 0 8px;
+  }
+  .finds-panel .finds-disclosure {
+    font-size: 8px;
+    padding-top: 6px;
+  }
+}

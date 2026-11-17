@@ -4,225 +4,6 @@
   font-weight: 200 800;
   font-display: swap;
 }
-/* Phase 3: a find comes to you without taking over your browsing. */
-.bag-receipt {
-  display: inline-flex;
-  align-items: center;
-  padding: 10px 14px;
-  border: 1px dashed #b4b8a6;
-  border-radius: 6px;
-  font-size: 12px;
-  white-space: nowrap;
-  background: #edf0e5;
-}
-.hold-up-button {
-  width: 100%;
-  margin: 14px 0 4px;
-  min-height: 54px;
-}
-.hold-up-popup {
-  position: fixed;
-  z-index: 12;
-  right: 28px;
-  bottom: 24px;
-  width: min(440px, calc(100% - 40px));
-  max-height: calc(100dvh - 40px);
-  overflow: auto;
-  padding: 20px;
-  border: 1px solid #c7caba;
-  border-radius: 16px;
-  background: #fffefa;
-  box-shadow: 0 18px 65px #24291c26;
-  animation: find-arrives 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-.find-top {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  align-items: center;
-  margin-bottom: 18px;
-}
-.find-person {
-  font-size: 12px;
-  font-weight: 650;
-}
-.find-ascii {
-  font-family: monospace;
-  color: #8f9874;
-  letter-spacing: 4px;
-}
-.find-body {
-  display: grid;
-  grid-template-columns: 104px minmax(0, 1fr);
-  align-items: center;
-  gap: 18px;
-}
-.find-body img {
-  width: 104px;
-  height: 112px;
-  object-fit: cover;
-  border-radius: 8px;
-  background: #eeeee7;
-}
-.find-body h2 {
-  margin: 0 0 9px;
-  font-size: 22px;
-  letter-spacing: -0.7px;
-  line-height: 1.15;
-}
-.find-body p {
-  margin: 5px 0;
-  font-size: 13px;
-}
-.find-body p.fine {
-  font-size: 11px;
-}
-.find-receipt {
-  margin: 18px 0 0;
-  padding: 11px 12px;
-  border-radius: 6px;
-  background: #edf0e5;
-  font-size: 11px;
-  line-height: 1.55;
-}
-.find-repeat {
-  margin: 8px 0 0;
-  line-height: 1.5;
-}
-.find-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 16px;
-}
-.find-actions > button {
-  min-height: 42px;
-  padding: 10px 14px;
-  font-size: 12px;
-}
-.find-reactions {
-  display: flex;
-  gap: 5px;
-  margin-right: auto;
-}
-.find-reactions button {
-  border: 1px solid #deded7;
-  background: #fffefa;
-  border-radius: 50%;
-  width: 40px;
-  height: 40px;
-  padding: 0;
-  font-size: 19px;
-  transition:
-    transform 0.18s,
-    background 0.18s;
-}
-.find-reactions button:hover:not(:disabled) {
-  transform: translateY(-3px) rotate(-7deg);
-  background: #f3ecd9;
-}
-.find-queue {
-  margin: 14px 0 0;
-  font-size: 10px;
-  line-height: 1.5;
-}
-.find-floats {
-  position: absolute;
-  pointer-events: none;
-  bottom: 90px;
-  left: 40px;
-  width: 240px;
-  height: 0;
-}
-.floating-reaction {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  padding: 7px 12px;
-  border: 1px solid #e3e2d8;
-  border-radius: 24px;
-  background: #fffefa;
-  white-space: nowrap;
-  font-size: 15px;
-  box-shadow: 0 4px 16px #0000000d;
-  animation: reaction-rises 1.8s ease-out forwards;
-}
-@keyframes find-arrives {
-  from {
-    opacity: 0;
-    transform: translateY(22px) rotate(1deg);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) rotate(0);
-  }
-}
-@keyframes reaction-rises {
-  0% {
-    opacity: 0;
-    transform: translateY(8px) scale(0.8);
-  }
-  20% {
-    opacity: 1;
-  }
-  80% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0;
-    transform: translate(var(--drift), -110px) rotate(-5deg);
-  }
-}
-@media (max-width: 600px) {
-  .room-tools {
-    flex-wrap: wrap;
-    gap: 12px;
-  }
-  .bag-receipt {
-    order: 2;
-  }
-  .hold-up-popup {
-    right: 12px;
-    left: 12px;
-    bottom: max(12px, env(safe-area-inset-bottom));
-    width: auto;
-    max-height: calc(100dvh - 28px);
-    padding: 16px;
-    border-radius: 14px;
-  }
-  .find-body {
-    grid-template-columns: 82px minmax(0, 1fr);
-    gap: 13px;
-  }
-  .find-body img {
-    width: 82px;
-    height: 94px;
-  }
-  .find-body h2 {
-    font-size: 20px;
-  }
-  .find-actions {
-    gap: 5px;
-  }
-  .find-actions > button {
-    padding: 10px 11px;
-  }
-  .find-reactions {
-    gap: 3px;
-  }
-  .find-reactions button {
-    width: 36px;
-    height: 40px;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .floating-reaction {
-    animation: none;
-    opacity: 1;
-  }
-}
 /* Phase 2: people stay in view while each shopper wanders independently. */
 .phase-two-room .presence-strip {
   position: sticky;
@@ -1736,5 +1517,340 @@ dialog select {
   *::after {
     animation: none !important;
     transition: none !important;
+  }
+}
+
+/* Persistent shared finds. Desktop gets real space; smaller screens use a drawer. */
+.bag-receipt {
+  display: inline-flex;
+  padding: 10px 14px;
+  border: 1px dashed #b4b8a6;
+  border-radius: 6px;
+  font-size: 12px;
+  background: #edf0e5;
+  white-space: nowrap;
+}
+.share-find-button {
+  width: 100%;
+  min-height: 52px;
+  margin-top: 18px;
+}
+.product-copy .share-find-note {
+  font-size: 11px;
+  min-height: 32px;
+  line-height: 1.5;
+  margin: 9px 0 16px;
+}
+.shopping-layout,
+.browsing-area,
+#finds-desktop {
+  min-width: 0;
+}
+.finds-toggle {
+  display: inline-flex;
+  gap: 9px;
+  align-items: center;
+}
+.finds-unseen {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 10px;
+  padding: 0 5px;
+  background: #e4e9d5;
+  color: #414b30;
+  font-size: 10px;
+  font-weight: 700;
+}
+#finds-desktop {
+  display: none;
+}
+.finds-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  border: 1px solid #deded7;
+  border-radius: 12px;
+  background: #f4f4ed;
+  padding: 20px 16px 12px;
+}
+.finds-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex: none;
+}
+.finds-heading .eyebrow {
+  font-size: 9px;
+  margin: 0 0 8px;
+}
+.finds-heading h2 {
+  font-size: 24px;
+  font-weight: 500;
+  letter-spacing: -0.9px;
+  margin: 0;
+}
+#finds-count {
+  display: inline-block;
+  font-size: 11px;
+  letter-spacing: 0;
+  margin-left: 6px;
+  color: #707765;
+  vertical-align: middle;
+}
+.finds-panel .finds-intro {
+  font-size: 11px;
+  margin: 12px 0 18px;
+  line-height: 1.5;
+}
+.finds-list {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  overflow-anchor: none;
+  flex: 1;
+  min-height: 0;
+  padding: 2px 5px 8px 1px;
+  scrollbar-width: thin;
+}
+.finds-list:focus-visible {
+  outline: 2px solid #67744c;
+  outline-offset: 3px;
+}
+.finds-empty {
+  flex: 1;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 20px 8px 30px;
+}
+.finds-empty pre {
+  font-size: 16px;
+  line-height: 1.5;
+  color: #889173;
+}
+.finds-empty h3 {
+  font-size: 15px;
+  letter-spacing: -0.3px;
+  margin: 16px 0 10px;
+  font-weight: 550;
+}
+.finds-empty p {
+  font-size: 12px;
+  line-height: 1.7;
+  margin: 0;
+  color: #73766c;
+}
+.finds-panel:has(.finds-empty:not([hidden])) .finds-list {
+  flex: 0;
+  padding: 0;
+}
+.shared-find {
+  position: relative;
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 0 12px;
+  padding: 14px 12px 10px;
+  margin: 0 0 12px;
+  border: 1px solid #e2e3d8;
+  border-radius: 10px;
+  background: #fffefa;
+  transition:
+    border-color 0.25s,
+    background-color 0.25s;
+}
+.shared-find.find-highlight {
+  border-color: #a6b187;
+  background: #f1f4e7;
+}
+.shared-find > img {
+  width: 72px;
+  height: 84px;
+  object-fit: cover;
+  border-radius: 5px;
+  background: #efeee7;
+}
+.shared-find-copy {
+  min-width: 0;
+}
+.shared-find h3 {
+  font-size: 14px;
+  letter-spacing: -0.3px;
+  font-weight: 600;
+  line-height: 1.35;
+  margin: 0 0 6px;
+  overflow-wrap: anywhere;
+}
+.shared-find .find-variant {
+  margin: 0 0 5px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #666e5b;
+}
+.shared-find .find-price {
+  margin: 0;
+  font-size: 12px;
+}
+.shared-find .shared-by {
+  grid-column: 1/-1;
+  margin: 11px 0 10px;
+  font-size: 10px;
+  color: #6b725f;
+}
+.shared-find .find-warning {
+  grid-column: 1/-1;
+  margin: 10px 0 0;
+  color: #815230;
+  font-size: 10px;
+  line-height: 1.5;
+}
+.shared-find-actions {
+  display: flex;
+  grid-column: 1/-1;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+}
+.find-reactions {
+  display: flex;
+  gap: 4px;
+}
+.find-reactions button {
+  padding: 0;
+  width: 34px;
+  height: 38px;
+  border: 1px solid #e3e3d8;
+  border-radius: 50%;
+  font-size: 17px;
+  background: #fffefa;
+  transition:
+    transform 0.18s,
+    background 0.18s;
+}
+.find-reactions button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  background: #f0ead9;
+}
+.shared-find-actions .find-view {
+  min-height: 38px;
+  font-size: 10px;
+  border: 1px solid #d9ddcf;
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: #f1f3eb;
+  white-space: nowrap;
+}
+.find-again {
+  grid-column: 1/-1;
+  min-height: 16px;
+  height: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin: 7px 0 0;
+  font-size: 10px;
+  line-height: 1.5;
+}
+.find-floats {
+  position: absolute;
+  pointer-events: none;
+  left: 16px;
+  bottom: 55px;
+  width: 200px;
+  height: 0;
+}
+.floating-reaction {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  font-size: 13px;
+  padding: 7px 10px;
+  border: 1px solid #d9ddcf;
+  border-radius: 24px;
+  background: #fffefa;
+  white-space: nowrap;
+  animation: find-reaction-rises 1.8s ease-out forwards;
+}
+.finds-panel .finds-disclosure {
+  flex: none;
+  padding-top: 12px;
+  margin: 0;
+  border-top: 1px solid #deded7;
+  font-size: 9px;
+  line-height: 1.6;
+  color: #74796a;
+}
+.finds-drawer {
+  padding: 0;
+}
+@keyframes find-reaction-rises {
+  0% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.8);
+  }
+  20%,
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-90px) rotate(-5deg);
+  }
+}
+@media (min-width: 1180px) {
+  .shopping-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 340px;
+    gap: 28px;
+    padding: 0 4vw 48px;
+    align-items: start;
+  }
+  #finds-desktop {
+    display: block;
+    position: sticky;
+    top: calc(var(--presence-height, 160px) + 16px);
+    height: calc(100dvh - var(--presence-height, 160px) - 32px);
+    min-height: 240px;
+  }
+  .finds-toggle,
+  .finds-close {
+    display: none;
+  }
+  .browsing-area #product-dialog.product-page {
+    padding: 10px 0 40px;
+  }
+  .browsing-area .product-page #product-detail {
+    gap: 28px;
+  }
+  .phase-one-room .browsing-area .catalog-panel {
+    padding: 28px 0;
+  }
+  .phase-one-room .browsing-area .product-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .browsing-area .first-friend {
+    margin: 0 0 28px;
+  }
+  .browsing-area .catalog-toolbar {
+    align-items: start;
+    flex-wrap: wrap;
+  }
+}
+@media (min-width: 1500px) {
+  .phase-one-room .browsing-area .product-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shared-find,
+  .find-reactions button {
+    transition: none;
+  }
+  .floating-reaction {
+    animation: none;
+    opacity: 1;
   }
 }

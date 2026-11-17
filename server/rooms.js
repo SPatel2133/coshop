@@ -97,6 +97,7 @@ export class Rooms {
     return this.store.all("SELECT * FROM room_records WHERE id=?", id)[0];
   }
   delete(id) {
+    this.store.run("DELETE FROM shared_finds WHERE room_id=?", id);
     this.store.run("DELETE FROM bag_lines WHERE room_id=?", id);
     this.store.run("DELETE FROM events WHERE room_id=?", id);
     this.store.run("DELETE FROM connections WHERE room_id=?", id);
@@ -401,12 +402,14 @@ export class Rooms {
           this.bump(id, now, true);
         }
         const bag = this.holdUps.bag(id);
+        const find = this.holdUps.finds(id, result.event.variantId)[0];
         return {
           ack: {
             type: "command_ack",
             requestId: message.requestId,
             ok: true,
             event: result.event,
+            find,
             bag,
           },
           notification: result.replay
@@ -414,6 +417,7 @@ export class Rooms {
             : {
                 type: message.type === "hold_up" ? "hold_up" : "reaction",
                 event: result.event,
+                find,
                 bag,
                 version: this.row(id).version,
                 serverTime: now,
@@ -468,7 +472,7 @@ export class Rooms {
       capacity: 6,
       participants,
       bag: this.holdUps.bag(id),
-      holdUps: this.holdUps.recent(id, now),
+      finds: this.holdUps.finds(id),
       serverTime: now,
     };
   }

@@ -16,7 +16,7 @@ import {
 import { RoomConnection } from "./client/realtime.js";
 import { catalog } from "./catalog.mjs";
 import { Presence, resolveLocation } from "./client/presence.js";
-import { HoldUpsUI } from "./client/hold-ups.js";
+import { FindsUI } from "./client/hold-ups.js";
 let invite = new URLSearchParams(location.search).get("room"),
   connection,
   session,
@@ -31,7 +31,7 @@ const presence = new Presence(catalog, (destination) => {
     openProduct(destination.product, destination.variant.id);
   else showCollection(destination.category || "All");
 });
-const finds = new HoldUpsUI({
+const finds = new FindsUI({
   command: (type, payload) => connection.command(type, payload),
   view: (productId, variantId) => {
     const product = catalog.find((p) => p.id === productId);
@@ -365,6 +365,7 @@ function openProduct(
       variantId: variant.id,
     });
     connection?.activity();
+    finds.variantChanged();
   };
   copy.append(
     label,
@@ -373,14 +374,18 @@ function openProduct(
     availability,
     make(
       "p",
-      "Hold up shares this variant with everyone and adds it once to your shared bag. Sample products cannot be purchased.",
+      "Sample collection · reference prices and availability, not live merchandise. Sharing is separate from buying.",
       "fine",
     ),
   );
-  const hold = make("button", "Hold up ✋", "primary hold-up-button");
-  hold.type = "button";
-  copy.insertBefore(hold, copy.lastElementChild);
-  finds.attachButton(hold, product, () => select.value);
+  const share = make("button", "Share find", "primary share-find-button");
+  share.type = "button";
+  const note = make("p", "", "share-find-note fine");
+  note.id = "share-find-note";
+  share.setAttribute("aria-describedby", note.id);
+  copy.insertBefore(share, copy.lastElementChild);
+  copy.insertBefore(note, copy.lastElementChild);
+  finds.attachButton(share, note, product, () => select.value);
   detail.append(img, copy);
   $("product-dialog").hidden = false;
   $("collection-page").hidden = true;

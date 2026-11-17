@@ -1,166 +1,290 @@
 import { $, make } from "./rooms.js";
 
-// Pure queue: no DOM, no network and injectable timers for deterministic tests.
-export class HoldUpQueue {
-  constructor({
-    render,
-    completed = 0,
-    save = () => {},
-    clock = Date.now,
-    later = (fn, ms) => setTimeout(fn, ms),
-    cancel = (id) => clearTimeout(id),
-  }) {
-    Object.assign(this, { render, completed, save, clock, later, cancel });
-    this.items = [];
-    this.seen = new Set();
-    this.paused = false;
+// Local seen state is per viewer, keyed by variant, and never sent to the server.
+export class FindsState {
+  constructor(seen = [], save = () => {}) {
+    this.cards = new Map();
+    this.seen = new Set(seen);
+    this.save = save;
   }
-  add(events) {
-    for (const event of [...events].sort((a, b) => a.sequence - b.sequence)) {
-      if (event.sequence <= this.completed || this.seen.has(event.id)) continue;
-      this.seen.add(event.id);
-      this.items.push(event);
-    }
-    // Live frames and resync snapshots are ordered by the authoritative server.
-    this.items.sort((a, b) => a.sequence - b.sequence);
-    this.update();
+  merge(find) {
+    const old = this.cards.get(find.variantId);
+    if (old && old.latestShare.sequence >= find.latestShare.sequence)
+      return false;
+    this.cards.set(find.variantId, find);
+    return true;
   }
-  update() {
-    const active = this.items[0];
-    if (active?.id !== this.activeId) {
-      this.cancel(this.timer);
-      this.paused = false;
-      this.activeId = active?.id;
-      if (active) this.timer = this.later(() => this.dismiss(), 8000);
-    }
-    this.render(active || null, this.items.length, this.paused);
+  snapshot(finds) {
+    const present = new Set(finds.map((f) => f.variantId));
+    for (const id of this.cards.keys())
+      if (!present.has(id)) this.cards.delete(id);
+    for (const find of finds) this.merge(find);
   }
-  interact() {
-    if (!this.items.length) return;
-    this.paused = true;
-    this.cancel(this.timer);
-    this.update();
+  ordered() {
+    return [...this.cards.values()].sort((a, b) => b.sequence - a.sequence);
   }
-  dismiss() {
-    const event = this.items.shift();
-    if (!event) return;
-    this.completed = Math.max(this.completed, event.sequence);
-    this.save(this.completed);
-    this.update();
+  unseen() {
+    return this.ordered().filter((f) => !this.seen.has(f.variantId)).length;
   }
-  stop() {
-    this.cancel(this.timer);
+  markSeen(id, visible) {
+    if (!visible || !this.cards.has(id) || this.seen.has(id)) return false;
+    this.seen.add(id);
+    this.save([...this.seen]);
+    return true;
   }
 }
 
-export class HoldUpsUI {
+export class FindsUI {
   constructor({ command, view, error }) {
     Object.assign(this, { command, view, error });
-    this.bagRevision = -1;
+    this.nodes = new Map();
     this.reactions = new Set();
-    this.online = false;
-    const popup = $("hold-up-popup");
-    popup.addEventListener("pointerenter", () => this.queue?.interact());
-    popup.addEventListener("pointerdown", () => this.queue?.interact());
-    popup.addEventListener("focusin", () => this.queue?.interact());
-    document.addEventListener("keydown", (event) => {
-      if (
-        event.key === "Escape" &&
-        !popup.hidden &&
-        !document.querySelector("dialog[open]")
-      )
-        this.queue?.dismiss();
+    this.bagRevision = -1;
+    this.panel = $("finds-panel");
+    this.list = $("finds-list");
+    this.drawer = $("finds-drawer");
+    this.wide = matchMedia("(min-width: 1180px)");
+    this.wide.addEventListener("change", () => this.placePanel());
+    $("open-finds").onclick = () => this.openDrawer();
+    $("close-finds").onclick = () => this.closeDrawer();
+    this.drawer.addEventListener("cancel", (event) => {
+      event.preventDefault();
+      this.closeDrawer();
     });
+    this.drawer.addEventListener("keydown", (event) => {
+      if (event.key !== "Tab" || !this.drawer.open) return;
+      const controls = [
+        ...this.drawer.querySelectorAll(
+          "button:not([disabled]), [tabindex='0']",
+        ),
+      ].filter((node) => node.getClientRects().length > 0);
+      const first = controls[0],
+        last = controls.at(-1);
+      if (
+        (event.shiftKey && document.activeElement === first) ||
+        (!event.shiftKey && document.activeElement === last)
+      ) {
+        event.preventDefault();
+        (event.shiftKey ? last : first)?.focus();
+      }
+    });
+    this.drawer.addEventListener("close", () => {
+      this.finishDrawer();
+    });
+    this.observer = new IntersectionObserver(() => this.checkVisible(), {
+      root: this.list,
+      threshold: [0.5],
+    });
+    document.addEventListener("visibilitychange", () => this.checkVisible());
+    document.addEventListener(
+      "scroll",
+      () => {
+        this.sizePanel();
+        this.checkVisible();
+      },
+      {
+        passive: true,
+      },
+    );
+    addEventListener("resize", () => this.sizePanel());
+    this.list.addEventListener("scroll", () => this.checkVisible(), {
+      passive: true,
+    });
+    this.stripObserver = new ResizeObserver((entries) => {
+      document.documentElement.style.setProperty(
+        "--presence-height",
+        entries[0].contentRect.height + 36 + "px",
+      );
+      this.sizePanel();
+    });
+    this.stripObserver.observe(document.querySelector(".presence-strip"));
+    this.placePanel();
     this.ticker = setInterval(() => this.updateButton(), 200);
   }
-  setIdentity(room, me) {
-    const key = "coshop:finds:" + room.id + ":" + me;
-    if (this.key === key) return;
-    this.key = key;
-    this.queue?.stop();
-    this.renderedId = null;
-    this.bagRevision = -1;
-    let saved = null;
-    try {
-      saved = sessionStorage.getItem(key);
-    } catch {}
-    // A new participant sees current finds, not two minutes of old popups.
-    const old = room.holdUps.filter(
-      (e) => e.createdAt < room.serverTime - 8000,
+  placePanel() {
+    if (this.wide.matches && this.drawer.open) this.closeDrawer(false);
+    const host = this.wide.matches ? $("finds-desktop") : this.drawer;
+    if (this.panel.parentElement !== host) host.append(this.panel);
+    this.sizePanel();
+    this.checkVisible();
+  }
+  sizePanel() {
+    if (!this.wide.matches || $("room").hidden) return;
+    const host = $("finds-desktop");
+    const height = Math.max(
+      240,
+      Math.floor(
+        innerHeight - Math.max(0, host.getBoundingClientRect().top) - 16,
+      ),
     );
-    const completed =
-      saved === null
-        ? Math.max(0, ...old.map((e) => e.sequence))
-        : Number(saved) || 0;
-    this.queue = new HoldUpQueue({
-      completed,
-      render: (...args) => this.render(...args),
-      save: (n) => {
-        try {
-          sessionStorage.setItem(key, String(n));
-        } catch {}
-      },
+    if (host.style.height !== height + "px") host.style.height = height + "px";
+  }
+  openDrawer() {
+    if (this.wide.matches || this.drawer.open) return;
+    this.pageTop = scrollY;
+    this.restoreFocus = true;
+    this.locked = true;
+    document.body.style.setProperty(
+      "--drawer-scroll-top",
+      -this.pageTop + "px",
+    );
+    document.documentElement.classList.add("finds-modal-open");
+    this.drawer.showModal();
+    this.checkVisible();
+  }
+  closeDrawer(restore = true) {
+    this.restoreFocus = restore;
+    if (this.drawer.open) {
+      this.drawer.close();
+      this.finishDrawer();
+    }
+  }
+  finishDrawer() {
+    if (!this.locked) return;
+    this.locked = false;
+    document.documentElement.classList.remove("finds-modal-open");
+    document.body.style.removeProperty("--drawer-scroll-top");
+    scrollTo({ top: this.pageTop || 0, left: 0, behavior: "instant" });
+    if (this.restoreFocus && !this.wide.matches)
+      $("open-finds").focus({ preventScroll: true });
+  }
+  isVisible() {
+    return (
+      !document.hidden &&
+      !$("room").hidden &&
+      (this.wide.matches || this.drawer.open)
+    );
+  }
+  checkVisible() {
+    if (!this.state || !this.isVisible()) return;
+    const bounds = this.list.getBoundingClientRect();
+    const top = Math.max(0, bounds.top),
+      bottom = Math.min(innerHeight, bounds.bottom);
+    for (const [id, node] of this.nodes) {
+      const rect = node.getBoundingClientRect();
+      this.state.markSeen(
+        id,
+        rect.height > 0 &&
+          Math.max(
+            0,
+            Math.min(rect.bottom, bottom) - Math.max(rect.top, top),
+          ) >=
+            rect.height * 0.5,
+      );
+    }
+    this.indicator();
+  }
+  setIdentity(room, me) {
+    const key = "coshop:seen-finds:" + room.id + ":" + me;
+    if (key === this.key) return;
+    this.key = key;
+    this.bagRevision = -1;
+    this.cooldownUntil = 0;
+    this.successUntil = 0;
+    let seen = [];
+    try {
+      const value = JSON.parse(localStorage.getItem(key) || "[]");
+      if (Array.isArray(value))
+        seen = value.filter((x) => typeof x === "string");
+    } catch {}
+    this.state = new FindsState(seen, (ids) => {
+      try {
+        localStorage.setItem(key, JSON.stringify(ids));
+      } catch {}
     });
-    this.queue.save(completed);
+    for (const node of this.nodes.values()) this.observer.unobserve(node);
+    this.nodes.clear();
+    this.list.replaceChildren();
   }
   snapshot(room, me) {
     this.setIdentity(room, me);
     this.setBag(room.bag);
-    this.queue.add(room.holdUps);
-    const latest = [...room.holdUps].reverse().find((e) => e.by.id === me);
-    if (latest)
+    this.state.snapshot(room.finds);
+    this.render();
+    const mine = room.finds
+      .map((f) => f.latestShare)
+      .filter((e) => e.by.id === me);
+    if (mine.length)
       this.cooldownUntil = Math.max(
         this.cooldownUntil || 0,
-        Date.now() + Math.max(0, latest.createdAt + 3000 - room.serverTime),
+        Date.now() +
+          Math.max(
+            0,
+            Math.max(...mine.map((e) => e.createdAt)) + 3000 - room.serverTime,
+          ),
       );
     this.updateButton();
   }
   message(message) {
     this.setBag(message.bag);
-    if (message.type === "hold_up") this.queue.add([message.event]);
-    else this.float(message.event);
+    if (message.type === "hold_up") {
+      const changed = this.state.merge(message.find);
+      if (changed)
+        this.render(
+          message.find.variantId,
+          message.event.repeated ? message.event.by.name : null,
+        );
+    } else this.float(message.event);
   }
   setBag(bag) {
-    if (!bag || bag.revision < this.bagRevision) return;
+    if (!bag || bag.revision <= this.bagRevision) return;
     this.bagRevision = bag.revision;
     $("bag-count").textContent = "Shared bag · " + bag.totalQuantity;
     $("bag-count").title =
-      "Sample bag. Quantity controls and checkout arrive in later phases.";
+      "Sharing never adds to the bag. Existing saved items are kept; bag editing arrives in Phase 4.";
   }
   setConnected(online) {
     this.online = online;
     this.updateButton();
-    for (const button of $("hold-up-popup").querySelectorAll("[data-reaction]"))
-      button.disabled = !online;
+    for (const node of this.nodes.values())
+      for (const button of node.querySelectorAll("[data-reaction]"))
+        button.disabled = !online;
+    $("finds-connection").textContent = online
+      ? "Worth a look, together."
+      : "Reconnecting… Saved finds stay here.";
   }
   deactivate() {
-    this.queue?.stop();
-    if (this.queue) this.queue.items = [];
     this.setConnected(false);
-    $("hold-up-popup").hidden = true;
+    this.closeDrawer(false);
   }
-  attachButton(button, product, variant) {
+  attachButton(button, note, product, variant) {
     this.button = button;
+    this.buttonNote = note;
+    const context = { product, variant };
+    this.buttonContext = context;
     button.onclick = async () => {
+      const chosen = variant();
       this.pending = true;
+      this.successUntil = 0;
       this.updateButton();
       try {
         const ack = await this.command("hold_up", {
           productId: product.id,
-          variantId: variant(),
+          variantId: chosen,
         });
         this.setBag(ack.bag);
-        this.queue.add([ack.event]);
+        if (this.state.merge(ack.find)) this.render(ack.find.variantId);
         this.cooldownUntil = Date.now() + 3000;
+        if (this.buttonContext === context && variant() === chosen)
+          this.successUntil = Date.now() + 1300;
       } catch (error) {
         if (error.retryAfterMs)
           this.cooldownUntil = Date.now() + error.retryAfterMs;
-        this.error(error.message);
+        this.error(
+          error.message +
+            (error.code === "COOLDOWN"
+              ? " Try again when the cooldown ends."
+              : " Your page is safe; check your connection and retry."),
+        );
       } finally {
         this.pending = false;
         this.updateButton();
       }
     };
+    this.updateButton();
+  }
+  variantChanged() {
+    this.successUntil = 0;
     this.updateButton();
   }
   updateButton() {
@@ -170,146 +294,155 @@ export class HoldUpsUI {
       Math.ceil(((this.cooldownUntil || 0) - Date.now()) / 1000),
     );
     this.button.disabled = !this.online || this.pending || wait > 0;
-    this.button.textContent = !this.online
-      ? "Reconnect to hold up"
-      : this.pending
-        ? "Sharing your find…"
-        : wait
-          ? "Another find in " + wait + "s"
-          : "Hold up ✋";
+    this.button.textContent = this.pending
+      ? "Sharing…"
+      : Date.now() < (this.successUntil || 0)
+        ? "Shared ✓"
+        : "Share find";
+    this.buttonNote.textContent = !this.online
+      ? "Reconnect to share a find. You can keep browsing."
+      : wait
+        ? "Ready to share again in " + wait + "s."
+        : "Worth a look? Sharing doesn’t add it to the bag.";
   }
-  render(event, length, paused) {
-    const popup = $("hold-up-popup");
-    const hadFocus = popup.contains(document.activeElement);
-    popup.hidden = !event;
-    if (!event) {
-      this.renderedId = null;
-      if (hadFocus)
-        (this.button?.isConnected
-          ? this.button
-          : $("back-to-collection")
-        ).focus();
-      return;
-    }
-    if (event.id !== this.renderedId) {
-      this.renderedId = event.id;
-      popup.replaceChildren();
-      const top = make("div", undefined, "find-top");
-      top.append(
-        make("span", "✋  " + event.by.name + " held this up", "find-person"),
-        make("span", "+ +", "find-ascii"),
-      );
-      const body = make("div", undefined, "find-body"),
-        img = make("img");
-      img.src = event.image;
-      img.alt = "";
-      const copy = make("div");
-      const heading = make("h2", event.name);
-      heading.id = "find-heading";
-      const price = new Intl.NumberFormat("en-CA", {
-        style: "currency",
-        currency: event.currency,
-      }).format(event.cents / 100);
-      copy.append(
-        heading,
-        make("p", event.variant + " · " + price),
-        make(
-          "p",
-          event.available ? "Sample product" : "Unavailable · sample product",
-          "fine",
-        ),
-      );
-      body.append(img, copy);
-      const receipt = make(
-        "p",
-        event.repeated
-          ? "Already in the bag · picked by " +
-              event.pickedBy.name +
-              " · quantity " +
-              event.quantity
-          : "Added to your shared bag · picked by " + event.pickedBy.name,
-        "find-receipt",
-      );
-      popup.append(top, body, receipt);
-      if (event.repeated)
-        popup.append(
-          make(
-            "p",
-            "Held up again by " +
-              event.by.name +
-              ". The original pick and quantity stay the same.",
-            "find-repeat fine",
-          ),
-        );
-      const actions = make("div", undefined, "find-actions"),
-        reactions = make("div", undefined, "find-reactions");
-      reactions.setAttribute("aria-label", "React to this find");
-      [
-        ["❤️", "Love"],
-        ["👎", "No"],
-        ["🤔", "Hmm"],
-      ].forEach(([emoji, label]) => {
-        const button = make("button", emoji);
-        button.type = "button";
-        button.dataset.reaction = emoji;
-        button.setAttribute("aria-label", label + " reaction");
-        button.disabled = !this.online;
-        button.onclick = async () => {
-          this.queue.interact();
-          try {
-            await this.command("react", { holdUpId: event.id, emoji });
-          } catch (error) {
-            this.error(error.message);
-          }
-        };
-        reactions.append(button);
-      });
-      const view = make("button", "View ↗", "primary");
-      view.type = "button";
-      view.onclick = () => {
-        this.view(event.productId, event.variantId);
-        this.queue.dismiss();
+  indicator() {
+    const count = this.state?.unseen() || 0;
+    $("finds-unseen").textContent = String(count);
+    $("finds-unseen").hidden = !count;
+    $("finds-count").textContent = String(this.state?.cards.size || 0);
+    $("open-finds").setAttribute(
+      "aria-label",
+      "Our finds" + (count ? ", " + count + " unseen" : ""),
+    );
+  }
+  card(find) {
+    const node = make("article", undefined, "shared-find");
+    node.dataset.variant = find.variantId;
+    const image = make("img");
+    image.alt = "";
+    image.loading = "lazy";
+    const copy = make("div", undefined, "shared-find-copy"),
+      heading = make("h3"),
+      variant = make("p", "", "find-variant"),
+      price = make("p", "", "find-price");
+    copy.append(heading, variant, price);
+    const warning = make("p", "", "find-warning");
+    const by = make("p", "Shared by " + find.sharedBy.name, "shared-by");
+    const actions = make("div", undefined, "shared-find-actions"),
+      reactions = make("div", undefined, "find-reactions");
+    reactions.setAttribute(
+      "aria-label",
+      "React to " + find.name + ", " + find.variant,
+    );
+    for (const [emoji, label] of [
+      ["❤️", "Love"],
+      ["👎", "No"],
+      ["🤔", "Hmm"],
+    ]) {
+      const button = make("button", emoji);
+      button.type = "button";
+      button.dataset.reaction = emoji;
+      button.setAttribute("aria-label", label + " reaction");
+      button.disabled = !this.online;
+      button.onclick = async () => {
+        try {
+          await this.command("react", {
+            holdUpId: this.state.cards.get(find.variantId).id,
+            emoji,
+          });
+        } catch (error) {
+          this.error(error.message);
+        }
       };
-      const dismiss = make("button", "Dismiss", "quiet");
-      dismiss.type = "button";
-      dismiss.onclick = () => this.queue.dismiss();
-      actions.append(reactions, dismiss, view);
-      this.queueNote = make("p", "", "find-queue fine");
-      const floats = make("div", undefined, "find-floats");
-      floats.id = "find-floats";
-      floats.setAttribute("aria-live", "polite");
-      popup.append(actions, this.queueNote, floats);
-      if (hadFocus) dismiss.focus();
-      $("find-announcement").textContent =
-        event.by.name +
-        " held up " +
-        event.name +
-        ", " +
-        event.variant +
-        ", " +
-        price +
-        ".";
+      reactions.append(button);
     }
-    this.queueNote.textContent =
-      (length > 1 ? length - 1 + " more waiting · " : "") +
-      ((this.queue?.paused ?? paused)
-        ? "Take your time. View or dismiss when ready."
-        : "Closes in 8s · interact to keep it here");
+    const view = make("button", "View product", "find-view");
+    view.type = "button";
+    view.onclick = () => {
+      this.closeDrawer(false);
+      this.view(find.productId, find.variantId);
+    };
+    actions.append(reactions, view);
+    const again = make("p", "", "find-again fine"),
+      floats = make("div", undefined, "find-floats");
+    floats.setAttribute("aria-live", "polite");
+    node.append(image, copy, warning, by, actions, again, floats);
+    node.parts = { image, heading, variant, price, warning, by, again, floats };
+    return node;
+  }
+  render(highlight, repeatedBy) {
+    this.sizePanel();
+    const bounds = this.list.getBoundingClientRect();
+    const anchor =
+      this.list.scrollTop > 0
+        ? [...this.list.children].find(
+            (n) => n.getBoundingClientRect().bottom > bounds.top + 1,
+          )
+        : null;
+    const offset = anchor?.getBoundingClientRect().top;
+    const ordered = this.state.ordered();
+    for (const [id, node] of this.nodes)
+      if (!this.state.cards.has(id)) {
+        this.observer.unobserve(node);
+        node.remove();
+        this.nodes.delete(id);
+      }
+    let next = this.list.firstElementChild;
+    for (const find of ordered) {
+      let node = this.nodes.get(find.variantId);
+      if (!node) {
+        node = this.card(find);
+        this.nodes.set(find.variantId, node);
+        this.observer.observe(node);
+      }
+      if (node !== next) this.list.insertBefore(node, next);
+      next = node.nextElementSibling;
+      const p = node.parts;
+      if (p.image.getAttribute("src") !== find.image) p.image.src = find.image;
+      p.heading.textContent = find.name;
+      p.variant.textContent = find.variant;
+      p.price.textContent = new Intl.NumberFormat("en-CA", {
+        style: "currency",
+        currency: find.currency,
+        currencyDisplay: "code",
+      }).format(find.cents / 100);
+      p.warning.hidden = find.available !== false;
+      p.warning.textContent =
+        find.available === false ? "Unavailable in the sample catalog" : "";
+      if (find.variantId === highlight) {
+        clearTimeout(node.highlightTimer);
+        node.classList.add("find-highlight");
+        node.highlightTimer = setTimeout(
+          () => node.classList.remove("find-highlight"),
+          1600,
+        );
+        if (repeatedBy) {
+          clearTimeout(node.repeatTimer);
+          p.again.textContent = repeatedBy + " shared this again";
+          node.repeatTimer = setTimeout(() => (p.again.textContent = ""), 3500);
+        }
+      }
+    }
+    if (anchor?.isConnected)
+      this.list.scrollTop += anchor.getBoundingClientRect().top - offset;
+    $("finds-empty").hidden = ordered.length > 0;
+    this.indicator();
+    this.checkVisible();
   }
   float(event) {
     if (this.reactions.has(event.id)) return;
     this.reactions.add(event.id);
     if (this.reactions.size > 256)
       this.reactions.delete(this.reactions.values().next().value);
-    if (event.holdUpId !== this.renderedId) return;
-    const layer = $("find-floats");
+    const node = this.nodes.get(event.variantId);
+    if (!node || !this.isVisible()) return;
+    const layer = node.parts.floats;
     if (layer.children.length >= 6) layer.firstElementChild.remove();
     const float = make(
       "span",
       event.emoji + " " + event.by.name,
       "floating-reaction",
     );
-    float.style.setProperty("--drift", Math.random() * 60 - 30 + "px");
     layer.append(float);
     setTimeout(() => float.remove(), 1800);
   }

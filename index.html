@@ -173,6 +173,15 @@
           <p id="room-description">Wander a little. You’re in good company.</p>
         </div>
         <div class="room-tools">
+          <button
+            id="open-finds"
+            class="secondary finds-toggle"
+            aria-haspopup="dialog"
+            aria-controls="finds-drawer"
+          >
+            Our finds
+            <span id="finds-unseen" class="finds-unseen" hidden>0</span>
+          </button>
           <span id="bag-count" class="bag-receipt" role="status"
             >Shared bag · 0</span
           >
@@ -190,62 +199,109 @@
         <ul id="members" class="seat-list" aria-live="polite"></ul>
         <p id="company-note" class="fine"></p>
       </section>
-      <section class="first-friend" id="first-friend">
-        <div>
-          <span class="tiny-ascii" aria-hidden="true">[ : ) ] + [ ? ]</span>
-          <h2>You’re the first one here.</h2>
-          <p>Drop the invite in your call chat. We’ll save them a seat.</p>
+      <div class="shopping-layout">
+        <div class="browsing-area">
+          <section class="first-friend" id="first-friend">
+            <div>
+              <span class="tiny-ascii" aria-hidden="true">[ : ) ] + [ ? ]</span>
+              <h2>You’re the first one here.</h2>
+              <p>Drop the invite in your call chat. We’ll save them a seat.</p>
+            </div>
+            <button id="invite-empty" class="primary">
+              Share your room ↗
+            </button>
+          </section>
+          <section
+            id="product-dialog"
+            class="product-page"
+            aria-label="Product"
+            hidden
+          >
+            <button id="back-to-collection" class="quiet" type="button">
+              ← Back to the collection
+            </button>
+            <div class="nearby-rack">
+              <span id="nearby-note">A little space to look around</span>
+              <div id="nearby-people" aria-label="People at this product"></div>
+            </div>
+            <div id="product-detail"></div>
+          </section>
+          <section class="catalog-panel" id="collection-page">
+            <div class="catalog-toolbar">
+              <div>
+                <p class="eyebrow">The sample collection</p>
+                <h2>A few things to wander through.</h2>
+              </div>
+              <span class="sample-badge">Sample products · no checkout</span>
+            </div>
+            <nav
+              id="category-filters"
+              class="category-filters"
+              aria-label="Product categories"
+            ></nav>
+            <div id="products" class="product-grid"></div>
+            <p class="fine catalog-disclosure">
+              A sample collection to wander through together. These products
+              cannot be purchased. Share a find to add it to Our finds, separate
+              from the bag. Bag editing and Shopify checkout arrive in later
+              phases.
+            </p>
+          </section>
         </div>
-        <button id="invite-empty" class="primary">Share your room ↗</button>
-      </section>
-      <section
-        id="product-dialog"
-        class="product-page"
-        aria-label="Product"
-        hidden
-      >
-        <button id="back-to-collection" class="quiet" type="button">
-          ← Back to the collection
-        </button>
-        <div class="nearby-rack">
-          <span id="nearby-note">A little space to look around</span>
-          <div id="nearby-people" aria-label="People at this product"></div>
+        <div id="finds-desktop">
+          <aside
+            id="finds-panel"
+            class="finds-panel"
+            aria-labelledby="finds-heading"
+          >
+            <header class="finds-heading">
+              <div>
+                <p class="eyebrow">A little good company</p>
+                <h2 id="finds-heading">
+                  Our finds <span id="finds-count">0</span>
+                </h2>
+              </div>
+              <button
+                id="close-finds"
+                class="quiet finds-close"
+                aria-label="Close Our finds"
+                type="button"
+              >
+                Close ×
+              </button>
+            </header>
+            <p id="finds-connection" class="finds-intro fine">
+              Worth a look, together.
+            </p>
+            <div id="finds-empty" class="finds-empty">
+              <pre aria-hidden="true">
+[ : ) ]
+   +
+[     ]</pre
+              >
+              <h3>Something catch your eye?</h3>
+              <p>Share a find and it’ll land here for everyone.</p>
+            </div>
+            <div
+              id="finds-list"
+              class="finds-list"
+              role="region"
+              aria-label="Shared finds"
+              tabindex="0"
+            ></div>
+            <p class="finds-disclosure fine">
+              Sample collection · reference prices, not live inventory. Sharing
+              doesn’t add to the bag.
+            </p>
+          </aside>
         </div>
-        <div id="product-detail"></div>
-      </section>
-      <section class="catalog-panel" id="collection-page">
-        <div class="catalog-toolbar">
-          <div>
-            <p class="eyebrow">The sample collection</p>
-            <h2>A few things to wander through.</h2>
-          </div>
-          <span class="sample-badge">Sample products · no checkout</span>
-        </div>
-        <nav
-          id="category-filters"
-          class="category-filters"
-          aria-label="Product categories"
-        ></nav>
-        <div id="products" class="product-grid"></div>
-        <p class="fine catalog-disclosure">
-          A sample collection to wander through together. These products cannot
-          be purchased. Hold up a find to share it and save it once in your bag.
-          Bag editing and Shopify checkout arrive in later phases.
-        </p>
-      </section>
+      </div>
     </main>
-    <aside
-      id="hold-up-popup"
-      class="hold-up-popup"
-      aria-labelledby="find-heading"
-      hidden
-    ></aside>
-    <p
-      id="find-announcement"
-      class="sr-only"
-      role="status"
-      aria-live="polite"
-    ></p>
+    <dialog
+      id="finds-drawer"
+      class="finds-drawer"
+      aria-labelledby="finds-heading"
+    ></dialog>
     <dialog id="invite-dialog">
       <button
         class="close"

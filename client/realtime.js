@@ -208,7 +208,7 @@ export class RoomConnection {
       this.commands.delete(pending.message.requestId);
       pending.reject(
         new Error(
-          "Couldn’t confirm that action. Reconnect to check the shared bag before trying again.",
+          "Couldn’t confirm that action. Reconnect and check Our finds, then retry if it’s missing.",
         ),
       );
       return;

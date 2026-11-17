@@ -2,6 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 import schema from "./drizzle/room-object/0001_rooms.sql";
 import presenceSchema from "./drizzle/room-object/0002_presence.sql";
 import holdUpSchema from "./drizzle/room-object/0003_hold_ups.sql";
+import findsSchema from "./drizzle/room-object/0004_shared_finds.sql";
 import { configuration, RoomError } from "./server/config.js";
 import { verifyInvite, tokenHash, sameOrigin } from "./server/security.js";
 import { objectStore, migrate } from "./server/storage.js";
@@ -28,6 +29,7 @@ export class RoomObject extends DurableObject {
       migrate(this.store, schema);
       migrate(this.store, presenceSchema, 2);
       migrate(this.store, holdUpSchema, 3);
+      migrate(this.store, findsSchema, 4);
     });
     this.rooms = new Rooms(this.store, this.config);
     this.presenceCache = new Map();

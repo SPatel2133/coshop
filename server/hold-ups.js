@@ -3,10 +3,10 @@ import { RoomError } from "./config.js";
 const UUID =
   /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 export const REACTIONS = ["❤️", "👎", "🤔"];
-export const HOLD_REPLAY_MS = 120000;
 
 // Mutations run inside the room's synchronous transaction, on both runtimes.
-// The event log is the history; bag_lines is its materialized current state.
+// Internal hold_up commands now mean Share find. Finds and bag are independent
+// projections; sharing never writes to bag_lines or add_to_bag events.
 export class HoldUps {
   constructor(store, products) {
     Object.assign(this, { store, products });
@@ -21,6 +21,8 @@ export class HoldUps {
   event(row) {
     return {
       ...JSON.parse(row.payload),
+      productId: row.product_id,
+      variantId: row.variant_id,
       id: row.id,
       sequence: row.sequence,
       createdAt: row.created_at,
@@ -40,14 +42,39 @@ export class HoldUps {
     );
     return this.event(this.store.all("SELECT * FROM events WHERE id=?", id)[0]);
   }
-  recent(room, now) {
+  finds(room, variantId) {
     return this.store
       .all(
-        "SELECT * FROM (SELECT * FROM events WHERE room_id=? AND type='hold_up' AND created_at>=? ORDER BY sequence DESC LIMIT 128) ORDER BY sequence",
+        "SELECT first.*, last.id AS latest_id, last.sequence AS latest_sequence, last.created_at AS latest_at, last.payload AS latest_payload FROM shared_finds f JOIN events first ON first.id=f.first_event_id JOIN events last ON last.id=f.latest_event_id WHERE f.room_id=?" +
+          (variantId ? " AND f.variant_id=?" : "") +
+          " ORDER BY first.sequence DESC",
         room,
-        now - HOLD_REPLAY_MS,
+        ...(variantId ? [variantId] : []),
       )
-      .map((row) => this.event(row));
+      .map((row) => {
+        const first = this.event(row),
+          latest = JSON.parse(row.latest_payload);
+        return {
+          id: first.id,
+          sequence: first.sequence,
+          createdAt: first.createdAt,
+          productId: first.productId,
+          variantId: first.variantId,
+          name: latest.name,
+          image: latest.image,
+          variant: latest.variant,
+          cents: latest.cents,
+          currency: latest.currency,
+          available: latest.available,
+          sharedBy: first.by,
+          latestShare: {
+            id: row.latest_id,
+            sequence: row.latest_sequence,
+            createdAt: row.latest_at,
+            by: latest.by,
+          },
+        };
+      });
   }
   bag(room) {
     const items = this.store
@@ -126,14 +153,10 @@ export class HoldUps {
         message.holdUpId || "",
         room,
       )[0];
-      if (
-        !target ||
-        !REACTIONS.includes(message.emoji) ||
-        now - target.created_at > HOLD_REPLAY_MS
-      )
+      if (!target || !REACTIONS.includes(message.emoji))
         throw new RoomError(
           "INVALID_REACTION",
-          "Choose a reaction on a recent find.",
+          "Choose a reaction on a find in this room.",
         );
       return {
         replay: false,
@@ -156,12 +179,11 @@ export class HoldUps {
         "INVALID_PRODUCT",
         "That product or variant is no longer in this collection.",
       );
-    const line = this.store.all(
-      "SELECT * FROM bag_lines WHERE room_id=? AND variant_id=?",
+    const previous = this.store.all(
+      "SELECT * FROM shared_finds WHERE room_id=? AND variant_id=?",
       room,
       variant.id,
     )[0];
-    const pickedBy = this.person(line?.picked_by || user);
     const event = this.insert(
       requestId,
       room,
@@ -179,32 +201,17 @@ export class HoldUps {
         currency: variant.currency,
         available: variant.available,
         by: this.person(user),
-        pickedBy,
-        repeated: Boolean(line),
-        quantity: line?.quantity || 1,
+        repeated: Boolean(previous),
       },
       now,
     );
-    if (!line) {
-      this.store.run(
-        "INSERT INTO bag_lines(room_id,variant_id,product_id,quantity,picked_by,created_at) VALUES(?,?,?,1,?,?)",
-        room,
-        variant.id,
-        product.id,
-        user,
-        now,
-      );
-      this.insert(
-        crypto.randomUUID(),
-        room,
-        user,
-        "add_to_bag",
-        product.id,
-        variant.id,
-        { source: "hold_up", holdUpId: requestId, quantity: 1, pickedBy },
-        now,
-      );
-    }
+    this.store.run(
+      "INSERT INTO shared_finds(room_id,variant_id,first_event_id,latest_event_id) VALUES(?,?,?,?) ON CONFLICT(room_id,variant_id) DO UPDATE SET latest_event_id=excluded.latest_event_id",
+      room,
+      variant.id,
+      requestId,
+      requestId,
+    );
     return { replay: false, event };
   }
 }
