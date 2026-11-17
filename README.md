@@ -2,7 +2,7 @@
 
 A shared shopping room for friends already on a call. This phase adds live product/category presence, away states, Peek, Join, and nearby shopper avatars on top of the secure six-seat rooms. Everyone has equal permissions. Keep Discord or FaceTime open; coshop does not provide calling.
 
-**Current source:** Phase 2, runnable locally with Node or Cloudflare's local runtime. **Not yet published to Cloudflare.** The previous [Sites demo](https://coshop.valiantartichoke2.chatgpt.site) remains an older build; it does not demonstrate this phase.
+**Current source:** Phase 2, runnable locally with Node or Cloudflare's local runtime. **Direct Workers deployment is not configured.** A temporary public HTTPS tunnel can expose the Node preview while the laptop stays running. The previous [Sites demo](https://coshop.valiantartichoke2.chatgpt.site) remains an older build; it does not demonstrate this phase.
 
 ![Live presence while browsing independently](docs/phase2-peek.jpg)
 
@@ -104,7 +104,7 @@ pnpm test
 node --test tests/shopify.test.mjs
 ```
 
-`pnpm test` runs all 35 checks. It exercises the shared domain against SQLite and runs actual HTTP/WebSocket clients against **both Node and Wrangler's local Durable Object runtime**, including a race for the last seat. It does not replace Cloudflare with an in-memory fake. Tests use disposable databases and require ports 14294–14297 and 14304–14305 to be available.
+`pnpm test` runs all 37 checks. It exercises the shared domain against SQLite and runs actual HTTP/WebSocket clients against **both Node and Wrangler's local Durable Object runtime**, including a race for the last seat. It does not replace Cloudflare with an in-memory fake. Tests use disposable databases and require ports 14294–14297 and 14304–14305 to be available.
 
 Room foundation acceptance results, retained in this build:
 
@@ -123,7 +123,7 @@ Room foundation acceptance results, retained in this build:
 | Browser responsive checks                   | 390px and 320px, no horizontal overflow; not physical iPhone testing                               |
 | Build                                       | Worker bundle and static assets build successfully                                                 |
 
-There are **17 room-foundation tests**, **13 Phase 2 tests**, and **5 existing Shopify-client regression tests**. Shopify regressions use fixtures; they are not a live Shopify verification of this phase. GitHub Actions installs dependencies, builds the Worker, then runs these checks.
+There are **17 room-foundation tests**, **15 Phase 2 tests**, and **5 existing Shopify-client regression tests**. Shopify regressions use fixtures; they are not a live Shopify verification of this phase. GitHub Actions installs dependencies, builds the Worker, then runs these checks.
 
 ## Data and concurrency
 
@@ -145,24 +145,47 @@ Clients reconnect with exponential backoff and jitter, capped around 15 seconds,
 
 ## Configuration
 
-| Variable                   | Default / purpose                                                                   |
-| -------------------------- | ----------------------------------------------------------------------------------- |
-| `INVITE_SIGNING_SECRET`    | Required in production, 32+ random characters; generated/persisted for Node locally |
-| `PORT`, `HOST`             | Node only: `4193`, `0.0.0.0`                                                        |
-| `DATA_DIR`                 | Node only: `data/phase1`                                                            |
-| `ROOM_TTL_MS`              | `86400000` — 24 hours without actual activity                                       |
-| `SEAT_RESERVATION_MS`      | `600000` — ten minutes after disconnect                                             |
-| `HEARTBEAT_INTERVAL_MS`    | `20000`                                                                             |
-| `PRESENCE_IDLE_MS`         | `30000` — actual interaction idle threshold; heartbeats do not reset it             |
-| `HEARTBEAT_TIMEOUT_MS`     | `65000`                                                                             |
-| `CREATE_LIMIT_PER_HOUR`    | `10` per IP/window                                                                  |
-| `JOIN_LIMIT_PER_10_MIN`    | `60` per IP/window, including invitation/session/connection attempts                |
-| `SHOPIFY_STORE_DOMAIN`     | Environment configuration only; no hard-coded store                                 |
-| `SHOPIFY_STOREFRONT_TOKEN` | Public Storefront token, never an Admin/private token                               |
-| `SHOPIFY_API_VERSION`      | Set explicitly; example config uses `2026-10`                                       |
-| `SHOPIFY_BUYER_COUNTRY`    | Set explicitly; example config uses `CA`                                            |
+| Variable                   | Default / purpose                                                                                              |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `INVITE_SIGNING_SECRET`    | Required in production, 32+ random characters; generated/persisted for Node locally                            |
+| `PUBLIC_ORIGIN`            | Optional exact public HTTPS origin when a tunnel forwards to Node; arbitrary forwarded headers are not trusted |
+| `PORT`, `HOST`             | Node only: `4193`, `0.0.0.0`                                                                                   |
+| `DATA_DIR`                 | Node only: `data/phase1`                                                                                       |
+| `ROOM_TTL_MS`              | `86400000` — 24 hours without actual activity                                                                  |
+| `SEAT_RESERVATION_MS`      | `600000` — ten minutes after disconnect                                                                        |
+| `HEARTBEAT_INTERVAL_MS`    | `20000`                                                                                                        |
+| `PRESENCE_IDLE_MS`         | `30000` — actual interaction idle threshold; heartbeats do not reset it                                        |
+| `HEARTBEAT_TIMEOUT_MS`     | `65000`                                                                                                        |
+| `CREATE_LIMIT_PER_HOUR`    | `10` per IP/window                                                                                             |
+| `JOIN_LIMIT_PER_10_MIN`    | `60` per IP/window, including invitation/session/connection attempts                                           |
+| `SHOPIFY_STORE_DOMAIN`     | Environment configuration only; no hard-coded store                                                            |
+| `SHOPIFY_STOREFRONT_TOKEN` | Public Storefront token, never an Admin/private token                                                          |
+| `SHOPIFY_API_VERSION`      | Set explicitly; example config uses `2026-10`                                                                  |
+| `SHOPIFY_BUYER_COUNTRY`    | Set explicitly; example config uses `CA`                                                                       |
 
 Keep heartbeat interval comfortably below its timeout. Limits apply to a shared source IP, including several devices on one Wi-Fi. A quota response includes `Retry-After`; the interface does not loop aggressively through it.
+
+## Share the demo outside this laptop
+
+A localhost link only works on the device opening it. For temporary remote testing, install Cloudflare's official `cloudflared` binary and start a Quick Tunnel:
+
+```sh
+cloudflared tunnel --url http://127.0.0.1:4195 --no-autoupdate --protocol http2
+```
+
+Keep the tunnel running. Copy its generated HTTPS origin, then restart the Node server in a second terminal with that exact public origin:
+
+```powershell
+$env:PORT='4195'
+$env:PUBLIC_ORIGIN='https://YOUR-HOST.trycloudflare.com'
+node server.mjs
+```
+
+Share the generated HTTPS link, then invite friends from inside that page. The server checks the explicitly configured hostname for HTTPS requests and WebSocket upgrades; it does not broadly allow cross-origin requests or trust arbitrary forwarded-protocol headers. Localhost continues to work.
+
+Quick Tunnels need no Cloudflare account and support this demo's secure WebSocket connections. They are temporary: the URL changes when the tunnel restarts, and access ends if the laptop sleeps or either process stops. This is a Node preview behind a tunnel, not the Durable Object production deployment. The temporary Node tunnel conservatively shares the local proxy's abuse quota across visitors. See [Cloudflare Quick Tunnels](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/).
+
+Verified through the public HTTPS route: home page, room creation, joining, two authenticated secure WebSocket clients and cross-client presence. Two automated checks cover explicit public-origin handling and invalid origin configuration. Keep deployment values and binaries out of the repository.
 
 ## Cloudflare local runtime and deployment
 

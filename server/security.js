@@ -68,3 +68,16 @@ export function sameOrigin(request) {
       403,
     );
 }
+export function nodeRequestUrl(request, publicOrigin) {
+  // A tunnel terminates HTTPS before forwarding to local HTTP. Use only the
+  // explicitly configured public host; never trust arbitrary forwarded headers.
+  const publicUrl = publicOrigin ? new URL(publicOrigin) : null;
+  const origin =
+    publicUrl?.host === request.headers.host
+      ? publicUrl.origin
+      : "http://" + request.headers.host;
+  const url = new URL(request.url, origin);
+  if (url.origin !== origin)
+    throw new RoomError("INVALID_REQUEST", "Invalid request target.", 400);
+  return url;
+}

@@ -10,6 +10,7 @@ import {
   verifyInvite,
   tokenHash,
   sameOrigin,
+  nodeRequestUrl,
 } from "./server/security.js";
 import { nodeStore, migrate } from "./server/storage.js";
 import { Rooms, roomHttp, json } from "./server/rooms.js";
@@ -111,7 +112,7 @@ async function limit(ip, kind) {
 }
 const server = http.createServer(async (req, res) => {
   try {
-    const url = new URL(req.url, "http://" + req.headers.host),
+    const url = nodeRequestUrl(req, config.publicOrigin),
       headers = new Headers();
     for (const [k, v] of Object.entries(req.headers))
       if (v) headers.set(k, Array.isArray(v) ? v.join(",") : v);
@@ -166,7 +167,7 @@ const server = http.createServer(async (req, res) => {
 server.on("upgrade", async (req, socket, head) => {
   socket.on("error", () => {});
   try {
-    const url = new URL(req.url, "http://" + req.headers.host),
+    const url = nodeRequestUrl(req, config.publicOrigin),
       match = url.pathname.match(/^\/api\/rooms\/([^/]+)\/socket$/);
     if (!match || url.search)
       throw new RoomError("INVALID_LINK", "Invalid realtime link.", 404);
