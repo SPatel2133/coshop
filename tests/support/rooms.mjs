@@ -41,6 +41,9 @@ export async function launch(t, worker, extra = {}) {
         String(port),
         "--ip",
         "127.0.0.1",
+        // Keep parallel Wrangler instances off the shared devtools port.
+        "--inspector-port",
+        String(port + 1000),
         "--persist-to",
         directory,
         ...bindings,

@@ -4,7 +4,7 @@ A shared shopping room for friends already on a call. This phase adds live produ
 
 **Current source:** Phase 2, runnable locally with Node or Cloudflare's local runtime. **Not yet published to Cloudflare.** The previous [Sites demo](https://coshop.valiantartichoke2.chatgpt.site) remains an older build; it does not demonstrate this phase.
 
-![Peek without leaving your own product](docs/phase2-peek.jpg)
+![Live presence while browsing independently](docs/phase2-peek.jpg)
 
 ## Phase 2: try it with three windows
 
