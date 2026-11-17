@@ -53,35 +53,6 @@ export function showEntry(join, title) {
 export function renderRoom(room, me) {
   $("room-title").textContent = room.name;
   $("seat-count").textContent = room.participants.length + " / 6 seats";
-  $("members").replaceChildren(
-    ...room.participants.map((person) => {
-      const li = make(
-        "li",
-        undefined,
-        "seat" + (person.connected ? "" : " reserved"),
-      );
-      const face = make(
-        "span",
-        faces[person.avatar] || ":)",
-        "face " + person.avatar,
-      );
-      face.setAttribute("aria-hidden", "true");
-      const label = make("div");
-      label.append(
-        make("strong", person.name + (person.id === me ? " (you)" : "")),
-        make(
-          "span",
-          person.connected ? "Here" : "Seat saved · up to 10 min",
-          "seat-state",
-        ),
-      );
-      li.append(face, label);
-      return li;
-    }),
-  );
-  $("company-note").textContent = room.participants.some((p) => !p.connected)
-    ? "A lost connection doesn’t lose a friend. Disconnected seats stay reserved for 10 minutes."
-    : "Everyone has the same seat. No host controls, no accounts.";
   $("first-friend").hidden = room.participants.length > 1;
   if ($("room").hidden) showScreen("room");
 }

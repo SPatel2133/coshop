@@ -19,11 +19,16 @@ const schema = await readFile(
   "utf8",
 );
 const secret = "test-only-secret-with-at-least-32-characters";
+const presenceSchema = await readFile(
+  new URL("../drizzle/room-object/0002_presence.sql", import.meta.url),
+  "utf8",
+);
 function setup(t, env = {}) {
   const db = new DatabaseSync(":memory:");
   db.exec("PRAGMA foreign_keys=ON");
   const store = nodeStore(db);
   migrate(store, schema);
+  migrate(store, presenceSchema, 2);
   let now = 1000000;
   const config = configuration({ INVITE_SIGNING_SECRET: secret, ...env }),
     rooms = new Rooms(store, config, () => now);
@@ -164,7 +169,7 @@ test("heartbeats do not prolong room lifetime; expiration deletes participants a
   rooms.heartbeat(id, "socket");
   tick(1000);
   assert.throws(() => rooms.snapshot(id), { code: "ROOM_EXPIRED" });
-  for (const table of ["room_records", "participants", "connections"])
+  for (const table of ["room_records", "participants", "connections", "events"])
     assert.equal(store.all("SELECT * FROM " + table).length, 0);
 });
 test("actual activity resets inactivity deadline; expired join cannot resurrect room", (t) => {
@@ -202,5 +207,5 @@ test("schema migration is repeatable and does not erase existing rooms", (t) => 
   rooms.create(id, { name: "Maya", avatar: "sage" }, "maya");
   migrate(store, schema);
   assert.equal(rooms.snapshot(id).participants[0].name, "Maya");
-  assert.equal(store.all("SELECT * FROM schema_migrations").length, 1);
+  assert.equal(store.all("SELECT * FROM schema_migrations").length, 2);
 });

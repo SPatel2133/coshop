@@ -1,6 +1,8 @@
 import { RoomError } from "./config.js";
 import { displayName, avatar, roomName, uniqueName } from "./participants.js";
 import { newToken, digest, tokenHash, makeInvite } from "./security.js";
+import { Events } from "./events.js";
+import { catalog } from "../catalog.mjs";
 export const json = (data, status = 200, headers = {}) =>
   new Response(JSON.stringify(data), {
     status,
@@ -85,13 +87,15 @@ export async function roomHttp(rooms, id, action, request, config) {
   throw new RoomError("NOT_FOUND", "That room action does not exist.", 404);
 }
 export class Rooms {
-  constructor(store, config, clock = Date.now) {
+  constructor(store, config, clock = Date.now, products = catalog) {
     Object.assign(this, { store, config, clock });
+    this.events = new Events(store, products);
   }
   row(id) {
     return this.store.all("SELECT * FROM room_records WHERE id=?", id)[0];
   }
   delete(id) {
+    this.store.run("DELETE FROM events WHERE room_id=?", id);
     this.store.run("DELETE FROM connections WHERE room_id=?", id);
     this.store.run("DELETE FROM participants WHERE room_id=?", id);
     this.store.run("DELETE FROM room_records WHERE id=?", id);
@@ -239,10 +243,11 @@ export class Rooms {
       now = this.clock();
     this.store.transaction(() => {
       this.store.run(
-        "INSERT INTO connections(id,room_id,participant_id,last_seen_at) VALUES(?,?,?,?)",
+        "INSERT INTO connections(id,room_id,participant_id,last_seen_at,last_activity_at) VALUES(?,?,?,?,?)",
         connectionId,
         id,
         person.id,
+        now,
         now,
       );
       this.store.run(
@@ -281,7 +286,14 @@ export class Rooms {
         now + this.config.heartbeatTimeout + this.config.reservation,
         connection.participant_id,
       );
-      if (activity) this.bump(id, now, true);
+      if (activity) {
+        this.store.run(
+          "UPDATE connections SET last_activity_at=? WHERE id=?",
+          now,
+          connectionId,
+        );
+        this.bump(id, now, true);
+      }
     });
   }
   disconnect(id, connectionId) {
@@ -320,11 +332,45 @@ export class Rooms {
     for (const c of stale) this.disconnect(id, c.id);
     return { stale: stale.map((c) => c.id), seats: before };
   }
+  publishView(id, connectionId, input, requestId) {
+    const now = this.clock();
+    this.require(id, now);
+    const connection = this.store.all(
+      "SELECT * FROM connections WHERE room_id=? AND id=? AND last_seen_at>?",
+      id,
+      connectionId,
+      now - this.config.heartbeatTimeout,
+    )[0];
+    if (!connection)
+      throw new RoomError(
+        "SESSION_DISCONNECTED",
+        "Reconnect to restore your session.",
+        401,
+      );
+    return this.store.transaction(() => {
+      const result = this.events.appendView(
+        id,
+        connection.participant_id,
+        input,
+        requestId,
+        now,
+      );
+      if (result.accepted && !result.replay) {
+        this.store.run(
+          "UPDATE connections SET last_activity_at=? WHERE id=?",
+          now,
+          connectionId,
+        );
+        this.bump(id, now, true);
+      }
+      return { type: "view_ack", requestId, ...result };
+    });
+  }
   snapshot(id) {
     const now = this.clock(),
       room = this.require(id, now);
     const connections = this.store.all(
-      "SELECT participant_id FROM connections WHERE room_id=? AND last_seen_at>?",
+      "SELECT participant_id,last_activity_at FROM connections WHERE room_id=? AND last_seen_at>?",
       id,
       now - this.config.heartbeatTimeout,
     );
@@ -334,6 +380,16 @@ export class Rooms {
       name: p.display_name,
       avatar: p.avatar,
       connected: online.has(p.id),
+      away:
+        online.has(p.id) &&
+        now -
+          Math.max(
+            ...connections
+              .filter((c) => c.participant_id === p.id)
+              .map((c) => c.last_activity_at),
+          ) >=
+          this.config.presenceIdle,
+      view: this.events.location(this.events.latest(id, p.id)),
       reservedUntil: online.has(p.id) ? null : p.seat_until,
     }));
     return {
@@ -352,10 +408,13 @@ export class Rooms {
     const now = this.clock(),
       deadlines = [room.last_active_at + this.config.ttl];
     for (const c of this.store.all(
-      "SELECT last_seen_at FROM connections WHERE room_id=?",
+      "SELECT last_seen_at,last_activity_at FROM connections WHERE room_id=?",
       id,
-    ))
+    )) {
       deadlines.push(c.last_seen_at + this.config.heartbeatTimeout);
+      const idleAt = c.last_activity_at + this.config.presenceIdle;
+      if (idleAt > now) deadlines.push(idleAt);
+    }
     for (const p of this.seated(id, now)) deadlines.push(p.seat_until);
     return Math.max(now + 100, Math.min(...deadlines));
   }

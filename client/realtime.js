@@ -1,3 +1,18 @@
+// getRandomValues also works on a plain-HTTP LAN preview; randomUUID is limited
+// to secure contexts on phones. Membership credentials come from the server.
+export function navigationId() {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 15) | 64;
+  bytes[8] = (bytes[8] & 63) | 128;
+  const hex = [...bytes].map((n) => n.toString(16).padStart(2, "0")).join("");
+  return [
+    hex.slice(0, 8),
+    hex.slice(8, 12),
+    hex.slice(12, 16),
+    hex.slice(16, 20),
+    hex.slice(20),
+  ].join("-");
+}
 // Authentication is the first frame, never part of the WebSocket URL.
 export class RoomConnection {
   constructor({
@@ -5,6 +20,8 @@ export class RoomConnection {
     token,
     interval = 20000,
     onState,
+    onPresence = () => {},
+    onReady = () => {},
     onStatus,
     onError,
     checkSession,
@@ -14,6 +31,8 @@ export class RoomConnection {
       token,
       interval,
       onState,
+      onPresence,
+      onReady,
       onStatus,
       onError,
       checkSession,
@@ -30,8 +49,24 @@ export class RoomConnection {
     this.visible = () => {
       if (!document.hidden && !this.ready) this.retry();
     };
+    this.pageHide = () => {
+      // Browsers may freeze a page in their back/forward cache instead of
+      // destroying it. Explicitly close its socket so friends see the exit.
+      this.generation++;
+      this.ready = false;
+      clearTimeout(this.retryTimer);
+      clearInterval(this.heartbeatTimer);
+      this.clearViewTimers();
+      this.inFlightView = null;
+      this.socket?.close(1000, "Page left");
+    };
+    this.pageShow = (event) => {
+      if (event.persisted && !this.stopped) this.retry();
+    };
     addEventListener("online", this.online);
     addEventListener("offline", this.offline);
+    addEventListener("pagehide", this.pageHide);
+    addEventListener("pageshow", this.pageShow);
     document.addEventListener("visibilitychange", this.visible);
   }
   connect() {
@@ -66,6 +101,7 @@ export class RoomConnection {
       this.lastReply = Date.now();
       if (message.type === "state") {
         clearTimeout(deadline);
+        const firstSnapshot = !this.ready;
         if (!this.ready) {
           this.ready = true;
           this.attempt = 0;
@@ -80,13 +116,41 @@ export class RoomConnection {
           }, this.interval);
         }
         this.onState(message);
-      } else if (message.type === "error") this.onError(message);
+        if (firstSnapshot) {
+          this.onReady();
+          this.flushView();
+        }
+      } else if (message.type === "presence") this.onPresence(message);
+      else if (message.type === "view_ack") {
+        if (this.inFlightView?.requestId !== message.requestId) return;
+        clearTimeout(this.viewAckTimer);
+        const flight = this.inFlightView;
+        this.inFlightView = null;
+        if (message.accepted) {
+          if (this.desiredView?.requestId === flight.requestId)
+            this.desiredView = null;
+          this.flushView();
+        } else
+          this.viewTimer = setTimeout(
+            () => this.flushView(),
+            (message.retryAfterMs || 500) + 20,
+          );
+      } else if (message.type === "error") {
+        if (message.code === "INVALID_VIEW") {
+          this.clearViewTimers();
+          this.inFlightView = null;
+          this.desiredView = null;
+        }
+        this.onError(message);
+      }
     };
     socket.onerror = () => {};
     socket.onclose = async () => {
       clearTimeout(deadline);
       if (generation !== this.generation || this.stopped) return;
       clearInterval(this.heartbeatTimer);
+      this.clearViewTimers();
+      this.inFlightView = null;
       this.ready = false;
       this.onStatus(false);
       // An HTTP request distinguishes expired/full/invalid sessions from a lost
@@ -107,11 +171,40 @@ export class RoomConnection {
     };
   }
   send(message) {
-    if (this.ready && this.socket?.readyState === WebSocket.OPEN)
+    if (this.ready && this.socket?.readyState === WebSocket.OPEN) {
       this.socket.send(JSON.stringify(message));
+      return true;
+    }
+    return false;
+  }
+  setView(view) {
+    this.desiredView = { type: "view", requestId: navigationId(), view };
+    this.flushView();
+  }
+  flushView() {
+    clearTimeout(this.viewTimer);
+    if (!this.ready || this.inFlightView || !this.desiredView) return;
+    const wait = 500 - (Date.now() - (this.lastViewSent || 0));
+    if (wait > 0) {
+      this.viewTimer = setTimeout(() => this.flushView(), wait);
+      return;
+    }
+    const next = this.desiredView;
+    if (!this.send(next)) return;
+    this.lastViewSent = Date.now();
+    this.inFlightView = next;
+    // Reuse the same identifier if an acknowledgement is lost.
+    this.viewAckTimer = setTimeout(() => {
+      this.inFlightView = null;
+      this.flushView();
+    }, 3000);
+  }
+  clearViewTimers() {
+    clearTimeout(this.viewTimer);
+    clearTimeout(this.viewAckTimer);
   }
   activity() {
-    if (!this.ready || Date.now() - (this.lastActivity || 0) < 15000) return;
+    if (!this.ready || Date.now() - (this.lastActivity || 0) < 1100) return;
     this.lastActivity = Date.now();
     this.send({ type: "activity" });
   }
@@ -119,6 +212,8 @@ export class RoomConnection {
     if (this.stopped) return;
     clearTimeout(this.retryTimer);
     clearInterval(this.heartbeatTimer);
+    this.clearViewTimers();
+    this.inFlightView = null;
     this.generation++;
     this.socket?.close();
     this.attempt = 0;
@@ -129,9 +224,13 @@ export class RoomConnection {
     this.generation++;
     clearTimeout(this.retryTimer);
     clearInterval(this.heartbeatTimer);
+    this.clearViewTimers();
+    this.inFlightView = null;
     this.socket?.close();
     removeEventListener("online", this.online);
     removeEventListener("offline", this.offline);
+    removeEventListener("pagehide", this.pageHide);
+    removeEventListener("pageshow", this.pageShow);
     document.removeEventListener("visibilitychange", this.visible);
   }
 }

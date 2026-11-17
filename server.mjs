@@ -14,7 +14,12 @@ import {
 import { nodeStore, migrate } from "./server/storage.js";
 import { Rooms, roomHttp, json } from "./server/rooms.js";
 import { consume, rateKey } from "./server/abuse.js";
-import { parseMessage, errorMessage, stateMessage } from "./server/realtime.js";
+import {
+  parseMessage,
+  errorMessage,
+  stateMessage,
+  presenceChanges,
+} from "./server/realtime.js";
 const root = new URL("./", import.meta.url);
 try {
   process.loadEnvFile(fileURLToPath(new URL(".env", root)));
@@ -49,6 +54,15 @@ migrate(
   store,
   await readFile(new URL("drizzle/room-object/0001_rooms.sql", root), "utf8"),
 );
+migrate(
+  store,
+  await readFile(
+    new URL("drizzle/room-object/0002_presence.sql", root),
+    "utf8",
+  ),
+  2,
+);
+const presenceCache = new Map();
 const rooms = new Rooms(store, config),
   clients = new Map();
 const wsServer = new WebSocketServer({ noServer: true, maxPayload: 2048 });
@@ -59,16 +73,25 @@ const assets = new Map([
   ["/mobile.css", ["mobile.css", "text/css"]],
   ["/font.woff2", ["font.woff2", "font/woff2"]],
   ["/catalog.mjs", ["catalog.mjs", "text/javascript"]],
-  ...["rooms", "session", "realtime"].map((n) => [
+  ...["rooms", "session", "realtime", "presence"].map((n) => [
     "/client/" + n + ".js",
     ["client/" + n + ".js", "text/javascript"],
   ]),
 ]);
-function broadcast(id) {
+function broadcast(id, deltaOnly = false) {
   let message;
   try {
     message = stateMessage(rooms, id);
+    const changes = presenceChanges(message.room, presenceCache);
+    if (deltaOnly && !changes.membershipChanged) {
+      for (const delta of changes.messages)
+        for (const [ws, c] of clients)
+          if (c.roomId === id && c.person && ws.readyState === 1)
+            ws.send(JSON.stringify(delta));
+      return;
+    }
   } catch (error) {
+    presenceCache.delete(id);
     message = errorMessage(error);
   }
   for (const [ws, c] of clients)
@@ -179,7 +202,7 @@ server.on("upgrade", async (req, socket, head) => {
             c.window = Date.now();
             c.messages = 0;
           }
-          if (++c.messages > 120)
+          if (++c.messages > 240)
             throw new RoomError(
               "RATE_LIMITED",
               "Too many connection messages.",
@@ -204,13 +227,23 @@ server.on("upgrade", async (req, socket, head) => {
             message.type === "activity"
           ) {
             const activity =
-              message.type === "activity" && Date.now() - c.lastActivity > 1000;
+              message.type === "activity" &&
+              Date.now() - c.lastActivity >= 1000;
             rooms.heartbeat(roomId, c.id, activity);
             if (activity) {
               c.lastActivity = Date.now();
-              broadcast(roomId);
+              broadcast(roomId, true);
             } else
               ws.send(JSON.stringify({ type: "pong", serverTime: Date.now() }));
+          } else if (message.type === "view") {
+            const ack = rooms.publishView(
+              roomId,
+              c.id,
+              message.view,
+              message.requestId,
+            );
+            if (ack.accepted) broadcast(roomId, true);
+            ws.send(JSON.stringify(ack));
           } else if (message.type === "resync")
             ws.send(JSON.stringify(stateMessage(rooms, roomId, c.person)));
           else
@@ -247,18 +280,18 @@ const sweep = setInterval(
       } catch (e) {
         if (e.code !== "ROOM_EXPIRED") console.error("Room cleanup failed");
       }
-      broadcast(room.id);
+      broadcast(room.id, true);
     }
     store.run("DELETE FROM abuse_windows WHERE expires_at<=?", Date.now());
   },
-  Math.min(5000, config.heartbeat),
+  Math.min(1000, config.heartbeat, config.presenceIdle),
 );
 sweep.unref();
 server.listen(
   Number(process.env.PORT || 4193),
   process.env.HOST || "0.0.0.0",
   () =>
-    console.log("coshop Phase 1: http://localhost:" + server.address().port),
+    console.log("coshop Phase 2: http://localhost:" + server.address().port),
 );
 function shutdown() {
   clearInterval(sweep);

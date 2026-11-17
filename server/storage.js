@@ -24,7 +24,13 @@ export function objectStore(storage) {
     transaction: (fn) => storage.transactionSync(fn),
   };
 }
-export function migrate(store, sql) {
+export function migrate(store, sql, version = 1) {
+  if (
+    version > 1 &&
+    store.all("SELECT version FROM schema_migrations WHERE version=?", version)
+      .length
+  )
+    return;
   store.transaction(() => {
     for (const statement of sql
       .split(";")

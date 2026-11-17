@@ -1,11 +1,17 @@
 import { DurableObject } from "cloudflare:workers";
 import schema from "./drizzle/room-object/0001_rooms.sql";
+import presenceSchema from "./drizzle/room-object/0002_presence.sql";
 import { configuration, RoomError } from "./server/config.js";
 import { verifyInvite, tokenHash, sameOrigin } from "./server/security.js";
 import { objectStore, migrate } from "./server/storage.js";
 import { Rooms, roomHttp, json } from "./server/rooms.js";
 import { rateKey, consume } from "./server/abuse.js";
-import { errorMessage, parseMessage, stateMessage } from "./server/realtime.js";
+import {
+  errorMessage,
+  parseMessage,
+  stateMessage,
+  presenceChanges,
+} from "./server/realtime.js";
 const failure = (error) =>
   json(
     errorMessage(error),
@@ -19,8 +25,10 @@ export class RoomObject extends DurableObject {
     this.store = objectStore(ctx.storage);
     ctx.blockConcurrencyWhile(async () => {
       migrate(this.store, schema);
+      migrate(this.store, presenceSchema, 2);
     });
     this.rooms = new Rooms(this.store, this.config);
+    this.presenceCache = new Map();
   }
   id() {
     return this.erased
@@ -37,12 +45,16 @@ export class RoomObject extends DurableObject {
     if (Number.isFinite(deadline))
       await this.ctx.storage.setAlarm(Math.max(Date.now() + 100, deadline));
   }
-  broadcast(id) {
+  broadcast(id, deltaOnly = false) {
+    const room = this.rooms.snapshot(id);
+    const changes = presenceChanges(room, this.presenceCache);
     for (const ws of this.ctx.getWebSockets()) {
       const c = ws.deserializeAttachment();
       if (!c?.person || ws.readyState !== 1) continue;
       try {
-        ws.send(JSON.stringify(stateMessage(this.rooms, id, c.person)));
+        if (deltaOnly && !changes.membershipChanged) {
+          for (const delta of changes.messages) ws.send(JSON.stringify(delta));
+        } else ws.send(JSON.stringify({ type: "state", room, me: c.person }));
       } catch (error) {
         ws.send(JSON.stringify(errorMessage(error)));
         ws.close(4004, "Room expired");
@@ -51,6 +63,7 @@ export class RoomObject extends DurableObject {
   }
   async erase() {
     this.erased = true;
+    this.presenceCache.clear();
     for (const ws of this.ctx.getWebSockets())
       if (ws.readyState === 1) {
         ws.send(
@@ -125,7 +138,7 @@ export class RoomObject extends DurableObject {
         c.window = Date.now();
         c.messages = 0;
       }
-      if (++c.messages > 120)
+      if (++c.messages > 240)
         throw new RoomError(
           "RATE_LIMITED",
           "Too many connection messages.",
@@ -145,13 +158,23 @@ export class RoomObject extends DurableObject {
         this.broadcast(c.roomId);
       } else if (message.type === "heartbeat" || message.type === "activity") {
         const activity =
-          message.type === "activity" && Date.now() - c.lastActivity > 1000;
+          message.type === "activity" && Date.now() - c.lastActivity >= 1000;
         this.rooms.heartbeat(c.roomId, c.id, activity);
         if (activity) {
           c.lastActivity = Date.now();
-          this.broadcast(c.roomId);
+          this.broadcast(c.roomId, true);
         } else
           ws.send(JSON.stringify({ type: "pong", serverTime: Date.now() }));
+        ws.serializeAttachment(c);
+      } else if (message.type === "view") {
+        const ack = this.rooms.publishView(
+          c.roomId,
+          c.id,
+          message.view,
+          message.requestId,
+        );
+        if (ack.accepted) this.broadcast(c.roomId, true);
+        ws.send(JSON.stringify(ack));
         ws.serializeAttachment(c);
       } else if (message.type === "resync")
         ws.send(JSON.stringify(stateMessage(this.rooms, c.roomId, c.person)));
@@ -171,9 +194,14 @@ export class RoomObject extends DurableObject {
     if (this.erased) return;
     const c = ws.deserializeAttachment();
     if (!c?.person) return;
-    this.rooms.disconnect(c.roomId, c.id);
-    this.broadcast(c.roomId);
-    await this.schedule(c.roomId);
+    try {
+      this.rooms.disconnect(c.roomId, c.id);
+      this.broadcast(c.roomId);
+      await this.schedule(c.roomId);
+    } catch (error) {
+      if (error.code === "ROOM_EXPIRED") await this.erase();
+      else throw error;
+    }
   }
   async webSocketError(ws) {
     await this.webSocketClose(ws);
@@ -195,7 +223,7 @@ export class RoomObject extends DurableObject {
         )
           ws.close(4000, "Connection timed out");
       }
-      this.broadcast(id);
+      this.broadcast(id, true);
       await this.schedule(id);
     } catch (error) {
       if (error.code === "ROOM_EXPIRED") await this.erase();

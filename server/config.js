@@ -22,6 +22,7 @@ export function configuration(env = {}) {
     reservation: positive(env, "SEAT_RESERVATION_MS", 600000),
     heartbeat: positive(env, "HEARTBEAT_INTERVAL_MS", 20000),
     heartbeatTimeout: positive(env, "HEARTBEAT_TIMEOUT_MS", 65000),
+    presenceIdle: positive(env, "PRESENCE_IDLE_MS", 30000),
     createLimit: positive(env, "CREATE_LIMIT_PER_HOUR", 10),
     joinLimit: positive(env, "JOIN_LIMIT_PER_10_MIN", 60),
     shopify: {
