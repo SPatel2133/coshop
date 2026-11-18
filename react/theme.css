@@ -1,0 +1,1565 @@
+/* CoShop storefront. Existing fonts, palette and avatar colors are shared. */
+:root {
+  --ink: #242820;
+  --muted: #62665b;
+  --paper: #f8f7f4;
+  --sheet: #fffefa;
+  --sage-paper: #edf0e5;
+  --edge: #d9ddd1;
+  --control-edge: #858a7d;
+  --motion-ease: cubic-bezier(0.22, 0.7, 0.25, 1);
+  --motion-time: 220ms;
+}
+#root {
+  min-width: 0;
+  color: var(--ink);
+  background: var(--paper);
+  min-height: 100dvh;
+}
+#root [hidden] {
+  display: none !important;
+}
+#root :where(button, input, select, textarea, summary, a):focus-visible {
+  outline: 2px solid #456a47;
+  outline-offset: 3px;
+}
+#root :where(button, a) {
+  -webkit-tap-highlight-color: transparent;
+}
+#root :where(button) {
+  min-height: 44px;
+}
+#root button:disabled,
+#root [aria-disabled="true"] {
+  opacity: 0.55;
+  cursor: default;
+}
+#root :where(.primary, .secondary, .quiet, .react-bag-button, .category-chip) {
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease,
+    box-shadow 140ms ease,
+    transform 140ms ease;
+}
+#root
+  :where(
+    .primary,
+    .secondary,
+    .quiet,
+    .react-bag-button,
+    .category-chip
+  ):active:not(:disabled):not([aria-disabled="true"]) {
+  transform: scale(0.975);
+  transition-duration: 0ms;
+}
+#root :where(h1, h2, h3, p) {
+  overflow-wrap: anywhere;
+}
+#root .fine {
+  color: var(--muted);
+}
+#root input:not([type="radio"]),
+#root select,
+#root textarea {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--control-edge);
+  background: var(--sheet);
+  color: var(--ink);
+  border-radius: 8px;
+  padding: 9px 12px;
+  font: inherit;
+}
+.react-header {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 20px clamp(16px, 4vw, 64px);
+  border-bottom: 1px solid var(--edge);
+}
+.react-header .wordmark {
+  color: var(--ink);
+  font-size: 25px;
+  font-weight: 800;
+  text-decoration: none;
+  letter-spacing: -0.075em;
+}
+.react-header .wordmark span {
+  font-size: 14px;
+  margin-left: 0.4em;
+}
+.react-header > span {
+  font-size: 12px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.react-header > span:last-child {
+  margin-inline-start: auto;
+}
+.react-landing {
+  width: min(1280px, 100%);
+  margin: auto;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: clamp(24px, 6vw, 96px);
+  padding: clamp(60px, 11vh, 145px) clamp(16px, 4vw, 64px);
+  align-items: center;
+}
+.landing-intro {
+  display: grid;
+  gap: 20px;
+  align-content: center;
+}
+.landing-intro h1 {
+  margin: 0;
+  font-size: clamp(46px, 6vw, 91px);
+  line-height: 0.97;
+  letter-spacing: -0.08em;
+}
+.landing-intro > p:not(.eyebrow) {
+  max-width: 43ch;
+  line-height: 1.65;
+  margin: 0;
+}
+.landing-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.landing-showcase {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.85fr);
+  align-items: center;
+  gap: 12px;
+  padding: clamp(12px, 2.7vw, 38px);
+  background: var(--sage-paper);
+  border: 1px solid var(--edge);
+  border-radius: 18px;
+}
+.landing-showcase figure {
+  margin: 0;
+}
+.landing-showcase img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  object-fit: cover;
+  border-radius: 9px;
+}
+.landing-showcase figcaption {
+  color: var(--muted);
+  font-size: 12px;
+  padding: 10px 0;
+}
+.landing-showcase pre {
+  grid-column: 1 / -1;
+  margin: 6px 0 0;
+  text-align: center;
+  color: #526147;
+}
+.react-entry {
+  width: min(100%, 600px);
+  margin: auto;
+  padding: clamp(20px, 5vw, 64px) 16px;
+}
+.entry-card {
+  display: grid;
+  gap: 15px;
+  background: var(--sheet);
+  border: 1px solid var(--edge);
+  padding: clamp(18px, 5vw, 40px);
+  border-radius: 14px;
+}
+.entry-card h1 {
+  margin: 0;
+  font-size: clamp(30px, 5vw, 50px);
+  letter-spacing: -0.06em;
+}
+.entry-card p {
+  margin: 0;
+}
+.entry-card form,
+.entry-card label {
+  display: grid;
+  gap: 8px;
+}
+.entry-card form {
+  gap: 16px;
+}
+.react-avatars {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  border: 0;
+  padding: 0;
+}
+.react-avatars legend {
+  margin-bottom: 7px;
+}
+.react-avatars label {
+  display: grid;
+  place-items: center;
+  position: relative;
+  cursor: pointer;
+}
+.react-avatars input {
+  position: absolute;
+  opacity: 0;
+}
+.react-avatars .face {
+  min-width: 44px;
+  min-height: 44px;
+}
+.react-avatars input:checked + .face {
+  outline: 1px solid var(--ink);
+  outline-offset: 1px;
+}
+.react-avatars input:focus-visible + .face {
+  outline: 2px solid #456a47;
+  outline-offset: 3px;
+}
+.react-room {
+  --rail: clamp(16px, 4vw, 64px);
+}
+.react-room-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  padding: 16px var(--rail);
+}
+.react-room-head h1 {
+  min-width: 0;
+  margin: 0;
+  font-size: clamp(25px, 3vw, 38px);
+  letter-spacing: -0.05em;
+}
+.react-room-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+}
+.react-connection {
+  font-size: 12px;
+  color: #41533b;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+}
+.react-connection::before {
+  content: "●";
+  margin-right: 5px;
+  font-size: 8px;
+}
+.react-connection.is-offline {
+  color: #7a5234;
+}
+.react-bag-button {
+  margin-inline-end: auto;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding-inline: 12px;
+  border: 1px solid #b6c1ac;
+  background: var(--sage-paper);
+  border-radius: 8px;
+}
+.react-count {
+  display: inline-grid;
+  min-width: 22px;
+  min-height: 22px;
+  place-items: center;
+  border-radius: 999px;
+  padding: 2px 5px;
+  font-size: 11px;
+  font-weight: 700;
+  background: #dbe4ce;
+}
+.confirmed-cue {
+  animation: confirm-count 420ms var(--motion-ease) both;
+}
+@keyframes confirm-count {
+  30% {
+    transform: scale(1.17);
+    background: #b5c9a4;
+  }
+}
+.react-notice {
+  margin: 0 var(--rail) 6px;
+  color: var(--muted);
+}
+.react-presence {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  margin-inline: var(--rail);
+  background: var(--sage-paper);
+  border: 1px solid var(--edge);
+  border-radius: 10px;
+  padding: 8px 12px 3px;
+}
+.react-presence .company-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.react-presence .seat-list {
+  display: flex;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 2px;
+  overflow-x: auto;
+}
+.react-presence .presence-seat {
+  list-style: none;
+  min-width: 110px;
+  max-width: 185px;
+  flex: 0 0 auto;
+}
+.react-presence .presence-person {
+  min-height: 44px;
+}
+.room-reserved {
+  margin: 0;
+}
+.react-share-slot {
+  height: 44px;
+  display: flex;
+  justify-content: end;
+  align-items: center;
+  gap: 6px;
+}
+.react-checkout-note,
+.react-recap-shortcut {
+  min-width: 0;
+  flex: 0 1 auto;
+  margin-inline-end: auto;
+}
+.react-share-message {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+  padding-inline: 3px;
+  border-radius: 8px;
+  font-size: 13px;
+  animation: share-arrival 520ms var(--motion-ease) both;
+}
+.react-share-message span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.react-share-message button {
+  flex: none;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+@keyframes share-arrival {
+  from {
+    background: #ccdbba;
+    transform: translateX(6px);
+  }
+  to {
+    background: transparent;
+    transform: translateX(0);
+  }
+}
+.react-shopping-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 22px;
+  padding: 22px var(--rail) 64px;
+}
+.react-shopping-layout.with-activity {
+  grid-template-columns: minmax(0, 1fr) minmax(330px, 390px);
+}
+.catalog-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 3px 12px;
+}
+.catalog-heading h2 {
+  margin: 0;
+  font-size: clamp(23px, 3vw, 37px);
+  letter-spacing: -0.05em;
+}
+.catalog-heading p,
+.react-result {
+  margin: 0;
+}
+.collection-tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin: 12px 0 5px;
+}
+.collection-tools .category-filters {
+  margin: 0;
+  min-width: 0;
+  padding: 4px;
+}
+.react-search {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: min(100%, 300px);
+}
+.react-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(10px, 2vw, 24px);
+  margin-top: 12px;
+}
+.react-product {
+  padding: 0;
+  text-align: left;
+  min-width: 0;
+  background: none;
+  border: 0;
+  border-radius: 8px;
+}
+.react-grid .product-media {
+  aspect-ratio: 4 / 4.3;
+  display: grid;
+  background: #ecebe3;
+  overflow: hidden;
+}
+.react-grid .product-media img {
+  min-height: 0;
+  object-fit: cover;
+  width: 100%;
+  height: 100%;
+  transition: transform var(--motion-time) var(--motion-ease);
+}
+.react-card-copy {
+  display: grid;
+  gap: 4px;
+  padding-block: 9px;
+}
+.react-card-copy h3 {
+  margin: 0;
+  font-size: clamp(14px, 1.38vw, 19px);
+}
+.react-card-copy .eyebrow {
+  margin: 0;
+  color: var(--muted);
+}
+.catalog-note {
+  margin-block: 20px 0;
+}
+.react-product-page > button {
+  margin-bottom: 14px;
+}
+.react-product-detail {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: clamp(20px, 4vw, 58px);
+  align-items: start;
+}
+.react-product-detail .detail-media {
+  max-height: none;
+}
+.react-product-detail .detail-media img {
+  object-fit: cover;
+}
+.react-product-detail .product-copy {
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  padding-block: 12px;
+}
+.react-product-detail h2 {
+  margin: 0;
+  font-size: clamp(30px, 4.5vw, 59px);
+  letter-spacing: -0.07em;
+  line-height: 1.03;
+}
+.react-product-detail p {
+  margin: 0;
+}
+.detail-price {
+  font-size: 24px;
+  font-weight: 700;
+}
+.react-product-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.react-product-actions button {
+  flex: 1 1 130px;
+}
+.react-product-page .nearby-rack {
+  margin: 0 0 10px;
+}
+.react-product-page .nearby-person {
+  min-width: 44px;
+}
+
+.react-activity {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid var(--edge);
+  border-radius: 12px;
+  background: var(--sheet);
+  max-height: min(72vh, 760px);
+  padding: 14px;
+}
+.react-activity > header,
+.react-drawer-head {
+  position: relative;
+  flex: 0 0 auto;
+  padding-inline-end: 85px;
+  margin-bottom: 7px;
+}
+.react-activity h2,
+.react-drawer-head h2,
+.react-modal h2 {
+  margin: 0;
+  letter-spacing: -0.04em;
+}
+.react-activity > header .dialog-close,
+.react-drawer-head .dialog-close {
+  top: 0;
+  right: 0;
+}
+.react-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  border-bottom: 1px solid var(--edge);
+}
+.react-tabs button {
+  flex: 1;
+  font-weight: 700;
+  border-radius: 0;
+  border-bottom: 2px solid transparent;
+}
+.react-tabs button[aria-selected="true"] {
+  border-bottom-color: #536747;
+}
+.tab-count {
+  color: var(--muted);
+}
+.react-panel-body {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.react-panel-body > .fine {
+  margin: 6px 0;
+}
+.react-find-list {
+  min-height: 0;
+  overflow-y: auto;
+  overflow-anchor: auto;
+  padding: 3px;
+}
+.react-find {
+  position: relative;
+  border: 1px solid var(--edge);
+  border-radius: 9px;
+  margin: 8px 0;
+  padding: 12px;
+}
+.react-find p,
+.react-find h3 {
+  margin: 4px 0;
+}
+.react-find-head {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.react-find-head img {
+  width: 60px;
+  height: 60px;
+  object-fit: cover;
+  border-radius: 6px;
+}
+.react-find-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+.react-find-actions .find-reactions {
+  flex: 1;
+}
+.react-find-actions button {
+  padding-inline: 8px;
+}
+.react-thread {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.react-thread h3 {
+  margin: 0;
+}
+.react-messages {
+  list-style: none;
+  padding: 4px;
+  margin: 8px 0;
+  min-height: 78px;
+  overflow-y: auto;
+  overflow-anchor: none;
+}
+.react-thread li,
+.react-bag-items li {
+  list-style: none;
+}
+.react-composer label,
+#root .quick-comment label {
+  display: grid;
+  gap: 5px;
+}
+#root .quick-comment {
+  padding: 7px;
+}
+.react-empty {
+  color: var(--muted);
+  margin: 6px 0;
+  padding: 14px;
+  border: 1px dashed var(--edge);
+  border-radius: 8px;
+}
+#root .react-modal {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  border: 1px solid var(--edge);
+  color: var(--ink);
+  border-radius: 13px;
+  background: var(--sheet);
+  width: min(470px, calc(100% - 26px));
+  max-width: none;
+  max-height: calc(
+    100dvh - max(24px, env(safe-area-inset-top) + env(safe-area-inset-bottom))
+  );
+  padding: 20px;
+  overscroll-behavior: contain;
+  overflow-y: auto;
+  opacity: 1;
+  transform: translate(0, 0);
+  transition:
+    opacity 180ms ease,
+    transform var(--motion-time) var(--motion-ease);
+}
+#root .react-modal::backdrop {
+  background: #23291e68;
+  transition: background-color 180ms ease;
+}
+#root .react-modal[data-motion="right"] {
+  inset: 0 0 0 auto;
+  margin: 0;
+  max-height: 100dvh;
+  height: 100dvh;
+  border-radius: 12px 0 0 12px;
+  padding-bottom: max(20px, env(safe-area-inset-bottom));
+}
+#root .react-modal[data-exiting] {
+  opacity: 0;
+  transform: translateY(10px);
+}
+#root .react-modal[data-motion="right"][data-exiting] {
+  transform: translateX(30px);
+}
+#root .react-modal[data-exiting]::backdrop {
+  background-color: transparent;
+}
+@starting-style {
+  #root .react-modal[open] {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  #root .react-modal[data-motion="right"][open] {
+    transform: translateX(30px);
+  }
+  #root .react-modal[open]::backdrop {
+    background-color: transparent;
+  }
+}
+html.coshop-modal-open {
+  overflow: hidden;
+}
+html.coshop-modal-open body {
+  position: fixed;
+  top: var(--modal-scroll);
+  width: 100%;
+  overflow: hidden;
+}
+#root .dialog-close {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  min-width: 44px;
+  min-height: 44px;
+}
+#root #peek-dialog,
+#root #haul-dialog,
+#root #invite-dialog {
+  padding-top: 51px;
+}
+#invite-dialog label,
+#invite-dialog input,
+#invite-dialog .text-link {
+  display: block;
+}
+#invite-dialog button:not([data-dialog-close]) {
+  margin-top: 8px;
+}
+#invite-dialog details {
+  padding-top: 8px;
+  border-top: 1px solid var(--edge);
+}
+#invite-dialog summary {
+  cursor: pointer;
+  min-height: 44px;
+  align-content: center;
+}
+#invite-dialog .text-link {
+  padding: 9px 0;
+}
+.peek-photo {
+  display: grid;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #ebece3;
+  place-items: center;
+}
+.peek-photo img {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  object-fit: cover;
+}
+.react-modal .peek-card h3 {
+  font-size: 25px;
+  letter-spacing: -0.04em;
+  margin: 10px 0 3px;
+}
+#root #finds-drawer {
+  padding: 0;
+  width: min(440px, 100%);
+}
+#root #finds-drawer.react-activity-dock {
+  position: sticky;
+  top: 150px;
+  inset-inline: auto;
+  margin: 0;
+  align-self: start;
+  width: 100%;
+  max-height: calc(100dvh - 164px);
+}
+#root #finds-drawer.react-activity-dock .react-activity {
+  max-height: calc(100dvh - 164px);
+  min-height: 0;
+  height: auto;
+}
+#finds-drawer .react-activity {
+  border: 0;
+  border-radius: 0;
+  height: 100%;
+  max-height: none;
+}
+#root #bag-drawer {
+  width: min(490px, 100%);
+}
+#root #bag-drawer[open] {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.react-bag-items {
+  min-height: 0;
+  overflow-y: auto;
+  list-style: none;
+  padding: 0 3px;
+  margin: 0;
+  flex: 1 1 auto;
+}
+.react-bag-line {
+  display: grid;
+  grid-template-columns: 60px minmax(0, 1fr);
+  gap: 6px 10px;
+  border-top: 1px solid var(--edge);
+  padding: 10px 0;
+}
+.react-bag-line img {
+  width: 60px;
+  height: 60px;
+  object-fit: cover;
+  border-radius: 6px;
+}
+.react-bag-line .bag-line-controls {
+  grid-column: 2;
+  flex-wrap: wrap;
+}
+.react-bag-line h3,
+.react-bag-line p {
+  margin: 2px 0;
+}
+.react-bag-footer {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--edge);
+  padding-top: 8px;
+}
+.react-bag-footer > div,
+.react-haul-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.react-haul-banner {
+  margin: 4px var(--rail) 8px;
+  border: 1px solid var(--edge);
+  padding: 9px 12px;
+  border-radius: 8px;
+  background: var(--sage-paper);
+}
+.react-haul-banner p {
+  margin: 3px 0 0;
+}
+.react-toast {
+  position: fixed;
+  z-index: 15;
+  right: 16px;
+  bottom: 16px;
+  max-width: calc(100% - 32px);
+  color: var(--sheet);
+  background: var(--ink);
+  padding: 10px 14px;
+  border-radius: 8px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .react-product:hover .product-media img {
+    transform: scale(1.035);
+  }
+  .react-bag-button:hover {
+    background: #dce6d2;
+  }
+}
+@media (max-width: 760px) {
+  .react-header {
+    padding-block: 12px;
+  }
+  .react-header > span:not(:last-child) {
+    display: none;
+  }
+  .react-landing {
+    grid-template-columns: 1fr;
+    padding-block: 32px;
+  }
+  .react-room-head {
+    padding-block: 10px;
+    gap: 7px;
+  }
+  .react-room-tools {
+    width: 100%;
+  }
+  .react-connection {
+    order: 2;
+  }
+  .react-presence {
+    margin-inline: 0;
+    border-radius: 0;
+    padding-inline: 16px;
+  }
+  .react-shopping-layout {
+    padding-top: 12px;
+  }
+  .collection-tools {
+    margin-top: 5px;
+  }
+  .collection-tools .category-filters {
+    width: 100%;
+  }
+  .react-search {
+    width: 100%;
+  }
+  .react-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .react-product-detail {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+  .react-product-detail .detail-media {
+    max-height: min(47dvh, 330px);
+    aspect-ratio: 4 / 3;
+  }
+}
+@media (max-height: 560px) {
+  #root #bag-drawer .react-bag-items {
+    flex-basis: auto;
+    overflow: visible;
+  }
+  #finds-drawer .react-activity {
+    min-height: 100%;
+    height: auto;
+  }
+  #finds-drawer .react-find-list,
+  #finds-drawer .react-messages {
+    max-height: 42dvh;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #root *,
+  #root *::backdrop {
+    animation: none !important;
+    transition: none !important;
+  }
+  #root :where(.react-product:hover img, button:active) {
+    transform: none !important;
+  }
+}
+
+.react-checkout-note {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.react-recap-shortcut button {
+  padding-inline: 5px;
+}
+@media (max-width: 390px) {
+  .react-bag-button,
+  .react-share-message button {
+    padding-inline: 5px;
+  }
+  .react-share-message {
+    gap: 2px;
+  }
+  .react-share-message span {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+}
+
+/* Shared navigation and storefront rhythm */
+.react-header nav {
+  margin-inline-start: auto;
+}
+.react-header nav a,
+.site-footer a {
+  color: var(--ink);
+  text-decoration: none;
+}
+.react-header nav a:hover,
+.site-footer a:hover {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.site-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 24px clamp(16px, 4vw, 64px);
+  border-top: 1px solid var(--edge);
+  font-size: 13px;
+}
+.site-footer .wordmark {
+  font-size: 21px;
+  font-weight: 800;
+  letter-spacing: -0.055em;
+}
+.site-footer .wordmark span {
+  font-size: 12px;
+  margin-inline-start: 0.4em;
+}
+.react-landing {
+  padding-block: clamp(48px, 9vw, 116px);
+}
+.landing-intro h1 {
+  font-size: clamp(42px, 6vw, 88px);
+  letter-spacing: -0.065em;
+}
+.landing-art {
+  container-type: inline-size;
+  min-width: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px 10px;
+  border-radius: 14px;
+  background: #e8eddf;
+  color: #315741;
+}
+.landing-art pre {
+  margin: 0;
+  font: 600 2cqi/0.94 monospace;
+}
+.home-guide {
+  border-top: 1px solid var(--edge);
+  padding: clamp(36px, 7vw, 88px) clamp(16px, 4vw, 64px);
+  max-width: 1280px;
+  margin: auto;
+  scroll-margin-top: 24px;
+}
+.home-guide h2 {
+  font-size: clamp(28px, 4vw, 46px);
+  letter-spacing: -0.05em;
+}
+.home-guide ol {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 24px;
+  margin: 24px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.home-guide li {
+  border-top: 1px solid var(--edge);
+  padding-top: 16px;
+}
+.home-guide li p {
+  color: var(--muted);
+  margin-top: 6px;
+}
+.home-guide.is-revealed ol {
+  animation: guide-arrive 280ms var(--motion-ease) both;
+}
+@keyframes guide-arrive {
+  from {
+    opacity: 0.6;
+    transform: translateY(8px);
+  }
+}
+.react-share-slot {
+  justify-content: start;
+}
+.react-bag-button {
+  order: 5;
+  margin-inline: auto 0;
+  background: #315741;
+  border-color: #315741;
+  color: #fffefa;
+}
+.react-bag-button .react-count {
+  color: #244332;
+  background: #e5eddf;
+}
+.react-checkout-note,
+.react-recap-shortcut {
+  margin-inline-end: 0;
+}
+.activity-launch {
+  flex: none;
+}
+.react-find-reactions,
+.find-reactions button {
+  font-size: 13px;
+}
+.presence-person .face,
+.nearby-person .face {
+  width: 27px;
+  height: 27px;
+  font-size: 14px;
+}
+#root .dialog-close {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+}
+.close-glyph {
+  font-size: 16px;
+  line-height: 1;
+}
+#root #haul-dialog {
+  width: min(540px, calc(100% - 24px));
+  padding: 24px;
+}
+#haul-heading {
+  font-size: clamp(24px, 4vw, 34px);
+  margin-block: 4px 6px;
+}
+#haul-dialog > .react-bag-items {
+  margin-block: 16px 0;
+  padding: 0;
+}
+.haul-item {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 0;
+  border-top: 1px solid var(--edge);
+}
+.haul-photo {
+  display: block;
+  width: 54px;
+  height: 54px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--sage-paper);
+}
+.haul-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.haul-quantity {
+  font-variant-numeric: tabular-nums;
+}
+.haul-summary {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  border-top: 1px solid var(--edge);
+  padding-block: 12px;
+}
+.haul-highlights-title {
+  margin-block: 12px 6px;
+}
+.haul-highlights {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.haul-highlights li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--edge);
+  padding-block: 8px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .react-bag-button:hover {
+    background: #244332;
+  }
+}
+@media (max-width: 520px) {
+  .react-share-slot {
+    height: auto;
+    min-height: 44px;
+    flex-wrap: wrap;
+    padding-bottom: 4px;
+  }
+  .react-share-message {
+    order: 6;
+    width: 100%;
+    min-height: 44px;
+  }
+  .activity-launch,
+  .react-bag-button {
+    font-size: 12px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-guide.is-revealed ol {
+    animation: none;
+  }
+}
+
+/* CoShop design tokens */
+:root {
+  --paper: #faf8f4;
+  --sheet: #fff;
+  --ink: #21211e;
+  --muted: #615d55;
+  --edge: #e1dbd0;
+  --accent: #32523f;
+  --space-0: 0;
+  --space-4: 4px;
+  --space-8: 8px;
+  --space-12: 12px;
+  --space-16: 16px;
+  --space-24: 24px;
+  --space-32: 32px;
+  --space-48: 48px;
+  --space-64: 64px;
+  --page-gutter: var(--space-16);
+  --control-feedback: 120ms ease-out;
+  --overlay-enter: 240ms cubic-bezier(0, 0, 0.2, 1);
+  --overlay-exit: 160ms cubic-bezier(0.4, 0, 1, 1);
+  --bag-feedback: 150ms ease-out;
+}
+@font-face {
+  font-family: Geist;
+  src: url("@fontsource-variable/geist/files/geist-latin-wght-normal.woff2")
+    format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Geist Mono";
+  src: url("@fontsource-variable/geist-mono/files/geist-mono-latin-wght-normal.woff2")
+    format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+:root {
+  font:
+    16px/1.5 Geist,
+    system-ui,
+    sans-serif;
+}
+.face,
+.landing-art pre,
+.solo-bag-art {
+  font-family: "Geist Mono", ui-monospace, monospace;
+}
+.react-header,
+.site-footer,
+.react-room-head,
+.react-presence,
+.react-shopping-layout,
+.react-landing,
+.home-guide {
+  width: min(1280px, calc(100% - 2 * var(--page-gutter)));
+  margin-inline: auto;
+  padding-inline: 0;
+}
+.react-header,
+.site-footer {
+  gap: var(--space-16);
+  padding-block: var(--space-16);
+}
+.react-landing {
+  gap: var(--space-48);
+}
+.landing-intro {
+  gap: var(--space-16);
+}
+.landing-actions,
+.entry-card label {
+  gap: var(--space-8);
+}
+.entry-card {
+  gap: var(--space-16);
+  padding: var(--space-24);
+  border-radius: 12px;
+}
+.home-guide ol {
+  gap: var(--space-24);
+}
+.react-room-head {
+  padding-block: var(--space-16);
+  gap: var(--space-12);
+}
+.react-room-head h1 {
+  font-size: 30px;
+  line-height: 36px;
+  font-weight: 600;
+  letter-spacing: normal;
+}
+.react-room-tools {
+  gap: var(--space-8);
+}
+.react-presence {
+  padding: var(--space-8) var(--space-12);
+  border-radius: 12px;
+}
+.react-share-slot {
+  gap: var(--space-8);
+}
+.react-shopping-layout,
+.react-shopping-layout.with-activity {
+  padding-block: var(--space-24) var(--space-64);
+  grid-template-columns: minmax(0, 1fr);
+}
+.catalog-heading h2 {
+  font-size: 28px;
+  line-height: 34px;
+  font-weight: 600;
+  letter-spacing: normal;
+}
+.catalog-heading {
+  gap: var(--space-4) var(--space-12);
+}
+.collection-tools {
+  gap: var(--space-8) var(--space-12);
+  margin-block: var(--space-8) var(--space-4);
+}
+.collection-tools .category-filters {
+  padding-inline: 0;
+  gap: var(--space-8);
+}
+.react-grid {
+  gap: var(--space-12);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: var(--space-12);
+}
+.react-grid .product-media {
+  aspect-ratio: 4/3;
+  width: 100%;
+  max-width: 298.67px;
+  border-radius: 12px;
+}
+.react-card-copy {
+  gap: var(--space-4);
+  padding-block: var(--space-8) 0;
+}
+.react-card-copy h3 {
+  font-size: 16px;
+  line-height: 22px;
+  font-weight: 600;
+}
+.react-card-copy,
+.detail-price,
+.react-count,
+.bag-line-controls {
+  font-variant-numeric: tabular-nums;
+}
+#root .fine,
+#root .eyebrow,
+.react-connection,
+.presence-copy strong,
+.presence-location {
+  font-size: 14px;
+  line-height: 20px;
+}
+#root :where(.primary, .secondary, .quiet, .category-chip, .react-bag-button) {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+  transition:
+    background-color var(--control-feedback),
+    border-color var(--control-feedback),
+    color var(--control-feedback);
+}
+#root
+  :where(
+    .primary,
+    .secondary,
+    .quiet,
+    .category-chip,
+    .react-bag-button
+  ):active:not(:disabled):not([aria-disabled="true"]) {
+  transform: none;
+}
+#root .primary,
+#root .react-bag-button {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+#root .react-modal h2,
+#root .react-activity h2 {
+  font-size: 20px;
+  line-height: 26px;
+  font-weight: 600;
+  letter-spacing: normal;
+}
+#root .react-modal {
+  transition:
+    opacity var(--overlay-enter),
+    transform var(--overlay-enter);
+  padding: var(--space-24);
+  border-radius: 12px;
+}
+#root .react-modal[data-exiting] {
+  transition:
+    opacity var(--overlay-exit),
+    transform var(--overlay-exit);
+  transform: translateY(12px);
+}
+#root .react-modal[data-motion="right"][data-exiting] {
+  transform: translateX(12px);
+}
+#root .react-modal::backdrop {
+  transition: background-color var(--overlay-enter);
+}
+#root .react-modal[data-exiting]::backdrop {
+  transition: background-color var(--overlay-exit);
+}
+@starting-style {
+  #root .react-modal[open] {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  #root .react-modal[data-motion="right"][open] {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+}
+#root #finds-drawer,
+#root #finds-drawer.react-activity-dock {
+  position: fixed;
+  inset: 0 0 0 auto;
+  width: min(360px, calc(100% - 16px));
+  height: 100dvh;
+  max-height: 100dvh;
+  padding: 0;
+  margin: 0;
+  border-radius: 12px 0 0 12px;
+  z-index: 10;
+}
+#root #finds-drawer .react-activity {
+  max-height: none;
+  height: 100%;
+  padding: var(--space-16);
+  overflow: auto;
+}
+.react-activity > header {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  background: var(--sheet);
+  padding-block: var(--space-4);
+}
+.activity-people {
+  padding-block: var(--space-8);
+  display: grid;
+  gap: var(--space-4);
+  font-size: 14px;
+}
+.activity-solo {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-8);
+}
+.solo-bag-art {
+  white-space: pre;
+  margin: 0;
+  width: 10ch;
+  height: 6em;
+  line-height: 1.2;
+}
+.confirmed-cue {
+  animation: confirm-count var(--bag-feedback) both;
+}
+@keyframes confirm-count {
+  from {
+    background: #b5c9a4;
+  }
+  to {
+    background: #dbe4ce;
+  }
+}
+@media (max-width: 767px) {
+  .react-room-tools {
+    width: auto;
+  }
+  .react-header {
+    gap: var(--space-8);
+  }
+  .react-share-slot {
+    min-height: 44px;
+  }
+}
+@media (min-width: 768px) {
+  :root {
+    --page-gutter: var(--space-24);
+  }
+  .react-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-16);
+  }
+  .catalog-heading h2 {
+    font-size: 32px;
+    line-height: 38px;
+  }
+  .react-card-copy h3 {
+    font-size: 18px;
+    line-height: 24px;
+  }
+  #root #finds-drawer.react-activity-dock {
+    width: 352px;
+    box-shadow: -8px 0 24px #21211e1a;
+  }
+}
+@media (min-width: 1024px) {
+  .react-room-head h1 {
+    font-size: 40px;
+    line-height: 44px;
+  }
+}
+@media (min-width: 1200px) {
+  :root {
+    --page-gutter: var(--space-32);
+  }
+  .react-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--space-24);
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  #root
+    :is(.primary, .react-bag-button):hover:not(:disabled):not(
+      [aria-disabled="true"]
+    ) {
+    background: #274433;
+  }
+}
+#root
+  :is(.primary, .react-bag-button):active:not(:disabled):not(
+    [aria-disabled="true"]
+  ) {
+  background: #1e3628;
+}
+
+.react-entry {
+  width: min(600px, calc(100% - 2 * var(--page-gutter)));
+  padding-inline: 0;
+}
+
+@media (max-width: 520px) {
+  .react-share-slot {
+    height: 44px;
+    flex-wrap: nowrap;
+  }
+  .react-share-message {
+    width: auto;
+    flex: 1 1 auto;
+  }
+}
+
+.react-grid [data-product="chair"] .product-media img {
+  object-fit: contain;
+}
+@media (min-width: 768px) {
+  #root:has(#finds-drawer.react-activity-dock[open]) {
+    --drawer-inset: max(
+      0px,
+      calc(368px - max(var(--page-gutter), (100vw - 1280px) / 2))
+    );
+  }
+  #root:has(#finds-drawer.react-activity-dock[open])
+    :is(.react-header, .react-room-head, .react-shopping-layout, .site-footer) {
+    padding-inline-end: var(--drawer-inset);
+  }
+  #root:has(#finds-drawer.react-activity-dock[open]) .react-presence {
+    padding-inline-end: calc(var(--space-12) + var(--drawer-inset));
+  }
+  #root:has(#finds-drawer.react-activity-dock[open]) .react-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (min-width: 1200px) {
+  #root:has(#finds-drawer.react-activity-dock[open]) .react-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}

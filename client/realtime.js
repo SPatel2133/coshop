@@ -176,7 +176,13 @@ export class RoomConnection {
         try {
           await this.checkSession();
         } catch (error) {
-          if (error.code && error.code !== "NETWORK") this.onError(error);
+          if (
+            generation === this.generation &&
+            !this.stopped &&
+            error.code &&
+            error.code !== "NETWORK"
+          )
+            this.onError(error);
         }
       }
       if (this.stopped || generation !== this.generation || !navigator.onLine)

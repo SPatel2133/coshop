@@ -5,7 +5,8 @@ import { readFile } from "node:fs/promises";
 import { Rooms } from "../server/rooms.js";
 import { configuration } from "../server/config.js";
 import { nodeStore, migrate } from "../server/storage.js";
-import { DiscussionUI, MessageHistory } from "../client/discussion.js";
+import { MessageHistory } from "../client/discussion.js";
+import { createDiscussion } from "../react/discussion-model.js";
 import { launch, api, socket, delay } from "./support/rooms.mjs";
 
 const schemas = await Promise.all(
@@ -143,66 +144,48 @@ test("discussion migration preserves finds; history is paged, room-scoped and er
   assert.equal(store.all("SELECT * FROM find_ratings").length, 0);
 });
 
-test("comment submit keeps new typing, ignores replaced composers and preserves the timeout retry ID", async () => {
-  const state = Object.assign(new MessageHistory(), {
-    findId: "stone",
-    draft: " Good pick ",
-  });
+test("discussion model keeps new typing and preserves the timeout retry ID", async () => {
   const actions = [];
-  let finish;
-  const original = { card: { announcement: { textContent: "" } } };
-  const different = { card: {} };
-  const discussion = Object.assign(Object.create(DiscussionUI.prototype), {
-    online: true,
-    feeds: new Map([[state.findId, state]]),
-    quick: original,
-    command: (...args) => {
+  let complete;
+  const model = createDiscussion(
+    (...args) => {
       actions.push(args);
       return new Promise((resolve, reject) => {
-        finish = { resolve, reject };
+        complete = { resolve, reject };
       });
     },
-    paintComposer() {},
-    message() {},
-    syncDraft() {},
-    collapseQuick() {
-      assert.fail("Do not close a replaced or edited composer");
-    },
-  });
-  const first = discussion.submit(state, original);
-  await discussion.submit(state, original);
+    () => {},
+  );
+  model.setConnected(true);
+  model.edit("stone", " Good pick ");
+  const first = model.submit("stone");
+  assert.equal(await model.submit("stone"), false);
   assert.equal(actions.length, 1);
   assert.deepEqual(actions[0].slice(0, 2), [
     "comment_post",
     { findId: "stone", text: "Good pick" },
   ]);
-  finish.reject(
+  complete.reject(
     Object.assign(new Error("Lost ACK"), { code: "COMMAND_TIMEOUT" }),
   );
-  await first;
-  assert.equal(state.draft, " Good pick ");
-  assert.equal(state.error, "Lost ACK");
-  const retry = discussion.submit(state, original);
-  assert.equal(actions[1][2], actions[0][2]);
-  discussion.quick = different;
-  state.draft = "Writing a second comment";
-  state.edit++;
-  finish.resolve({});
-  await retry;
-  assert.equal(discussion.quick, different);
-  assert.equal(state.draft, "Writing a second comment");
-  assert.equal(state.retry, null);
-  assert.equal(original.card.announcement.textContent, "Comment posted.");
+  assert.equal(await first, false);
+  assert.equal(model.feed("stone").draft, " Good pick ");
+  assert.equal(model.feed("stone").error, "Lost ACK");
 
-  const stale = discussion.submit(state, original);
-  const newRoom = Object.assign(new MessageHistory(), {
-    findId: "stone",
-    draft: "Different room",
-  });
-  discussion.feeds = new Map([[state.findId, newRoom]]);
-  finish.resolve({});
-  await stale;
-  assert.equal(newRoom.draft, "Different room");
+  const retry = model.submit("stone");
+  assert.equal(actions[1][2], actions[0][2]);
+  model.edit("stone", "Writing a second comment");
+  complete.resolve({});
+  assert.equal(await retry, false);
+  assert.equal(model.feed("stone").draft, "Writing a second comment");
+  assert.equal(model.feed("stone").retry, null);
+
+  const stale = model.submit("stone");
+  model.reset();
+  model.edit("stone", "Different room");
+  complete.resolve({});
+  assert.equal(await stale, false);
+  assert.equal(model.feed("stone").draft, "Different room");
 });
 
 test("client history deduplicates live messages and paginates across a reconnect gap", () => {

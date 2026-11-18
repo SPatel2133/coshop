@@ -1,20 +1,9 @@
-import { mkdir, cp, rm } from "node:fs/promises";
+import { build } from "vite";
+import { rm } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 const root = new URL("../", import.meta.url);
-await mkdir(new URL("dist/client/", root), { recursive: true });
-for (const file of [
-  "index.html",
-  "app.js",
-  "style.css",
-  "mobile.css",
-  "font.woff2",
-  "catalog.mjs",
-  "client",
-])
-  await cp(new URL(file, root), new URL("dist/client/" + file, root), {
-    recursive: true,
-  });
+await build({ configFile: fileURLToPath(new URL("vite.config.js", root)) });
 if (!process.argv.includes("--assets-only")) {
   // Do not leave an older Sites bundle looking like this Worker's entrypoint.
   await rm(new URL("dist/server/index.js", root), { force: true });

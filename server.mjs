@@ -109,27 +109,23 @@ migrate(
 const rooms = new Rooms(store, config, Date.now, catalog, storefront, true),
   clients = new Map();
 const wsServer = new WebSocketServer({ noServer: true, maxPayload: 2048 });
-const assets = new Map([
-  ["/", ["index.html", "text/html; charset=utf-8"]],
-  ["/app.js", ["app.js", "text/javascript"]],
-  ["/style.css", ["style.css", "text/css"]],
-  ["/mobile.css", ["mobile.css", "text/css"]],
-  ["/font.woff2", ["font.woff2", "font/woff2"]],
-  ["/catalog.mjs", ["catalog.mjs", "text/javascript"]],
-  ...[
-    "rooms",
-    "session",
-    "realtime",
-    "presence",
-    "hold-ups",
-    "discussion",
-    "bag",
-    "haul",
-  ].map((n) => [
-    "/client/" + n + ".js",
-    ["client/" + n + ".js", "text/javascript"],
-  ]),
-]);
+const clientRoot = new URL("dist/client/", root);
+const assetTypes = {
+  ".js": "text/javascript",
+  ".css": "text/css",
+  ".woff2": "font/woff2",
+};
+function clientAsset(pathname) {
+  if (pathname === "/" || pathname === "/index.html")
+    return ["index.html", "text/html; charset=utf-8"];
+  const generated = /^\/assets\/[a-zA-Z0-9_.-]+\.(js|css|woff2)$/.exec(
+    pathname,
+  );
+  return generated && !pathname.includes("..")
+    ? [pathname.slice(1), assetTypes["." + generated[1]]]
+    : null;
+}
+
 function broadcast(id, deltaOnly = false) {
   let message;
   try {
@@ -176,15 +172,27 @@ const server = http.createServer(async (req, res) => {
         : {}),
     });
     sameOrigin(request);
-    if (req.method === "GET" && assets.has(url.pathname)) {
-      const [path, type] = assets.get(url.pathname);
+    const asset = req.method === "GET" ? clientAsset(url.pathname) : null;
+    if (asset) {
+      const [path, type] = asset;
+      const contents = await readFile(new URL(path, clientRoot)).catch(
+        (error) => {
+          if (error.code !== "ENOENT") throw error;
+          return null;
+        },
+      );
+      if (!contents) {
+        res.writeHead(404);
+        res.end("Not found");
+        return;
+      }
       res.writeHead(200, {
         "Content-Type": type,
         "Cache-Control": "no-cache",
         "X-Content-Type-Options": "nosniff",
         "Referrer-Policy": "no-referrer",
       });
-      res.end(await readFile(new URL(path, root)));
+      res.end(contents);
       return;
     }
     let response;
