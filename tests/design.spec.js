@@ -534,6 +534,8 @@ test("three shoppers converge on exact finds across repeats, refresh, and explic
     const order = await ids(page);
     expect(await ids(maya)).toEqual(order);
     expect(await ids(priya)).toEqual(order);
+    for (const shopper of pages)
+      await expect(shopper.locator("#open-bag")).toHaveAccessibleName("Shared bag, 0 items");
     const stone = (shopper) => cards(shopper).filter({ hasText: "Stone" });
     await expect(stone(page)).toContainText("Shared by Maya");
     await expect(stone(page)).toContainText("Priya shared this again");
@@ -558,6 +560,12 @@ test("three shoppers converge on exact finds across repeats, refresh, and explic
     await page.getByRole("button", { name: "Add to bag" }).click();
     for (const shopper of pages)
       await expect(shopper.locator("#open-bag")).toHaveAccessibleName("Shared bag, 1 item");
+    await priya.reload();
+    await expect(priya.getByText("Connected", { exact: true })).toBeVisible();
+    await expect(priya.locator("#open-bag")).toHaveAccessibleName("Shared bag, 1 item");
+    await priya.locator("#open-finds").click();
+    await expect(cards(priya)).toHaveCount(2);
+    expect(await ids(priya)).toEqual(order);
   } finally {
     await Promise.all(contexts.map((context) => context.close()));
   }

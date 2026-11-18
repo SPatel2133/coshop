@@ -1,0 +1,159 @@
+{
+  "commit": "86d91123c0bbe3479f578a3cc68739a1339bbff0",
+  "dirty": true,
+  "node": "v24.22.1",
+  "platform": "win32-x64",
+  "startedAt": "2026-11-18T21:22:03.551Z",
+  "runtime": "Local Node SQLite over loopback",
+  "mode": "measure",
+  "passed": true,
+  "warmups": 3,
+  "samples": 20,
+  "socketsPerRoom": 3,
+  "concurrentShares": 2,
+  "timeoutMs": 2000,
+  "measurement": "performance.now(), before pair send through last client's second merged event",
+  "successfulMeasured": 20,
+  "p50Ms": 7.262300000000096,
+  "p95Ms": 10.837799999999788,
+  "trials": [
+    {
+      "phase": "warmup",
+      "number": 1,
+      "status": "pass",
+      "milliseconds": 14.166999999999916
+    },
+    {
+      "phase": "warmup",
+      "number": 2,
+      "status": "pass",
+      "milliseconds": 8.967899999999986
+    },
+    {
+      "phase": "warmup",
+      "number": 3,
+      "status": "pass",
+      "milliseconds": 14.184600000000046
+    },
+    {
+      "phase": "measured",
+      "number": 1,
+      "status": "pass",
+      "milliseconds": 10.837799999999788
+    },
+    {
+      "phase": "measured",
+      "number": 2,
+      "status": "pass",
+      "milliseconds": 4.8624999999999545
+    },
+    {
+      "phase": "measured",
+      "number": 3,
+      "status": "pass",
+      "milliseconds": 4.7175000000002
+    },
+    {
+      "phase": "measured",
+      "number": 4,
+      "status": "pass",
+      "milliseconds": 5.8577000000000226
+    },
+    {
+      "phase": "measured",
+      "number": 5,
+      "status": "pass",
+      "milliseconds": 7.683700000000044
+    },
+    {
+      "phase": "measured",
+      "number": 6,
+      "status": "pass",
+      "milliseconds": 6.1358000000000175
+    },
+    {
+      "phase": "measured",
+      "number": 7,
+      "status": "pass",
+      "milliseconds": 7.589099999999917
+    },
+    {
+      "phase": "measured",
+      "number": 8,
+      "status": "pass",
+      "milliseconds": 19.046600000000126
+    },
+    {
+      "phase": "measured",
+      "number": 9,
+      "status": "pass",
+      "milliseconds": 7.262300000000096
+    },
+    {
+      "phase": "measured",
+      "number": 10,
+      "status": "pass",
+      "milliseconds": 6.575900000000047
+    },
+    {
+      "phase": "measured",
+      "number": 11,
+      "status": "pass",
+      "milliseconds": 9.370100000000093
+    },
+    {
+      "phase": "measured",
+      "number": 12,
+      "status": "pass",
+      "milliseconds": 7.224899999999934
+    },
+    {
+      "phase": "measured",
+      "number": 13,
+      "status": "pass",
+      "milliseconds": 5.950600000000122
+    },
+    {
+      "phase": "measured",
+      "number": 14,
+      "status": "pass",
+      "milliseconds": 8.05540000000019
+    },
+    {
+      "phase": "measured",
+      "number": 15,
+      "status": "pass",
+      "milliseconds": 7.573100000000068
+    },
+    {
+      "phase": "measured",
+      "number": 16,
+      "status": "pass",
+      "milliseconds": 8.060699999999997
+    },
+    {
+      "phase": "measured",
+      "number": 17,
+      "status": "pass",
+      "milliseconds": 6.951500000000124
+    },
+    {
+      "phase": "measured",
+      "number": 18,
+      "status": "pass",
+      "milliseconds": 6.630900000000111
+    },
+    {
+      "phase": "measured",
+      "number": 19,
+      "status": "pass",
+      "milliseconds": 7.912199999999757
+    },
+    {
+      "phase": "measured",
+      "number": 20,
+      "status": "pass",
+      "milliseconds": 7.4702000000002045
+    }
+  ]
+}

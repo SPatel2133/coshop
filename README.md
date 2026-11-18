@@ -45,3 +45,11 @@ pnpm exec playwright test tests/design.spec.js --workers=1
 The browser suite defaults to port 4204. Start a preview server with a fresh `DATA_DIR`, `PORT=4204`, `CREATE_LIMIT_PER_HOUR=100`, and `JOIN_LIMIT_PER_10_MIN=150` using `pnpm start:preview`. Set `COSHOP_TEST_URL` to point the browser suite at a different isolated server. Vercel's assets-only command is `node scripts/build.mjs --assets-only`, with output in `dist/client`.
 
 See the [deployment runbook](docs/portfolio-preview.md) for preview isolation, origin settings, and rollback. Keep Shopify credentials, webhook secrets, and invite-signing secrets in server runtime configuration.
+
+## Engineering evidence
+
+- [Reproduce the three-shopper check and open the Playwright report](docs/evidence/reproduction.md).
+- [Measure local share convergence and inspect the raw trials](docs/evidence/benchmark.md).
+- [Trace a rate-limit response from symptom to recovery](docs/evidence/diagnosis.md).
+
+Sharing and adding are separate server commands. That costs an explicit add step and lets shoppers discuss an exact variant without changing anyone’s bag quantity.

@@ -1,0 +1,12 @@
+{
+  "commit": "86d91123c0bbe3479f578a3cc68739a1339bbff0",
+  "dirty": true,
+  "node": "v24.22.1",
+  "platform": "win32-x64",
+  "startedAt": "2026-11-18T21:22:03.537Z",
+  "runtime": "Local Node SQLite over loopback",
+  "mode": "reproduce",
+  "passed": true,
+  "exitCode": 0,
+  "scenario": "three shoppers converge"
+}
