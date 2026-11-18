@@ -1,5 +1,6 @@
-import React, { memo, useMemo, useRef, useState } from "react";
-import { Face, Photo, money } from "./ui.jsx";
+import { ProductGallery } from "./product-gallery.jsx";
+import React, { memo, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { DialogClose, Face, Modal, Photo, money } from "./ui.jsx";
 import { resolveLocation } from "../client/presence.js";
 
 export const Collection = memo(function Collection({
@@ -10,6 +11,7 @@ export const Collection = memo(function Collection({
   setQuery,
   chooseCategory,
   openProduct,
+  quickAdd,
   hidden,
 }) {
   const search = useRef(null);
@@ -40,9 +42,6 @@ export const Collection = memo(function Collection({
     <section id="collection-page" className="react-collection" hidden={hidden}>
       <div className="catalog-heading">
         <div>
-          <p className="eyebrow">
-            {storefront?.name || "The sample collection"}
-          </p>
           <h2 id="collection-heading" tabIndex={-1}>
             Browse the collection
           </h2>
@@ -111,59 +110,46 @@ export const Collection = memo(function Collection({
       )}
       <div id="products" className="react-grid">
         {filtered.map((product) => (
-          <button
-            key={product.id}
-            className="react-product"
-            data-product={product.id}
-            type="button"
-            aria-label={"View " + product.name}
-            onClick={() => openProduct(product)}
-          >
-            <Photo src={product.image} lazy />
-            <div className="react-card-copy">
-              <span className="eyebrow">{product.category}</span>
-              <h3>{product.name}</h3>
-              <span>
-                {product.variants[0]
-                  ? money(product.variants[0])
-                  : "Price unavailable"}
-              </span>
-            </div>
-          </button>
+          <div className="product-tile" key={product.id}>
+            <button
+              className="react-product"
+              data-product={product.id}
+              type="button"
+              aria-label={"View " + (product.name || "Untitled product")}
+              onClick={() => openProduct(product)}
+            >
+              <Photo src={product.image} lazy />
+              <div className="react-card-copy">
+                <h3>{product.name || "Untitled product"}</h3>
+                <span>
+                  {product.variants[0]
+                    ? money(product.variants[0])
+                    : "Price unavailable"}
+                </span>
+              </div>
+            </button>
+            <button
+              type="button"
+              className="secondary tile-quick-add"
+              aria-label={"Quick add " + (product.name || "Untitled product")}
+              aria-haspopup="dialog"
+              onClick={(event) => quickAdd(product, event.currentTarget)}
+            >
+              <span aria-hidden="true">+</span>
+            </button>
+          </div>
         ))}
       </div>
-      <p className="fine catalog-note">
-        {storefront?.mode === "shopify"
-          ? "Prices and availability come from Shopify and are checked again before checkout."
-          : "Sample products and reference prices. Share to save in Our finds, or add to make a shared pick."}
-      </p>
     </section>
   );
 });
 
-export function Product({
-  state,
-  store,
-  product,
-  variant,
-  back,
-  select,
-  peek,
-}) {
+function bagAddLabel(state, variant) {
   const bag = state.bag;
-  const person = state.room.participants.find(
-    (person) => person.id === state.me,
-  );
-  const nearby = state.room.participants.filter(
-    (person) =>
-      person.id !== state.me &&
-      person.connected &&
-      person.view?.productId === product.id,
-  );
   const line = bag.confirmed?.items.find(
     (item) => item.variantId === variant.id,
   );
-  const addLabel = !variant.available
+  return !variant.available
     ? "Unavailable"
     : bag.pending.has(variant.id)
       ? "Saving…"
@@ -174,9 +160,125 @@ export function Product({
           : line?.quantity >= 99
             ? "Bag limit reached"
             : "Add to bag";
+}
+
+function addVariant(state, store, product, variant) {
+  const person = state.room.participants.find(({ id }) => id === state.me);
+  if (!person || bagAddLabel(state, variant) !== "Add to bag") return;
+  return store.bag.change("add", {
+    productId: product.id,
+    variantId: variant.id,
+    quantity: 0,
+    name: product.name,
+    image: variant.image || product.image,
+    variant: variant.title,
+    cents: variant.cents,
+    currency: variant.currency,
+    available: variant.available,
+    pickedBy: person,
+  });
+}
+
+export function QuickAdd({ product, state, store, close }) {
+  const [variantId, setVariantId] = useState(product.variants[0]?.id);
+  const [action, setAction] = useState(null);
+  const variant = product.variants.find(({ id }) => id === variantId);
+  const addLabel = variant ? bagAddLabel(state, variant) : "Unavailable";
+  const shared = action === "share" && state.shareResult?.variantId === variantId;
+  return (
+    <Modal id="quick-add" label="quick-add-title" active close={close}>
+      {(dismiss) => (
+        <div className="quick-add-content">
+          <h2 id="quick-add-title">{product.name || "Untitled product"}</h2>
+          <DialogClose onClick={() => dismiss()} label="Close quick add">Close</DialogClose>
+          {variant ? (
+            <>
+              <label>
+                Choose a variant
+                <select value={variantId} onChange={(event) => {
+                  setVariantId(event.target.value);
+                  setAction(null);
+                }}>
+                  {product.variants.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.title} · {money(item, "code")}
+                      {!item.available ? " · Unavailable" : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <p className="fine">{variant.available ? "In stock" : "Unavailable"}</p>
+              <div className="react-product-actions">
+                <button type="button" className="primary"
+                  disabled={addLabel !== "Add to bag"}
+                  onClick={() => {
+                    setAction("bag");
+                    addVariant(state, store, product, variant);
+                  }}>
+                  {addLabel}
+                </button>
+                <button type="button" className="secondary"
+                  disabled={!state.online || state.sharing || state.shareWait > 0}
+                  onClick={() => {
+                    setAction("share");
+                    store.share(product, variant);
+                  }}>
+                  {state.sharing ? "Sharing…" : shared ? "Shared ✓" : "Share find"}
+                </button>
+              </div>
+              <p className="fine" role="status">
+                {action === "bag" ? state.bag.feedback :
+                  shared ? "Shared in Our finds." :
+                  !state.online ? "Reconnect to share or add to the bag." :
+                  state.shareWait ? "Ready to share again in " + state.shareWait + "s." :
+                  action === "share" ? state.toast : ""}
+              </p>
+            </>
+          ) : <p>No variants available.</p>}
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+export function Product({
+  state,
+  store,
+  product,
+  variant,
+  back,
+  select,
+  peek,
+}) {
+  const section = useRef(null);
+  useLayoutEffect(() => {
+    const page = section.current;
+    const media = page.querySelector(".detail-media");
+    const measure = () => {
+      const singlePhoto = !page.querySelector(".thumbnail-rail");
+      const inset = singlePhoto
+        ? media.getBoundingClientRect().left - page.getBoundingClientRect().left
+        : 0;
+      page.style.setProperty("--back-media-inset", Math.max(0, inset) + "px");
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(page);
+    observer.observe(media);
+    return () => observer.disconnect();
+  }, [product.id, variant.id]);
+
+  const nearby = state.room.participants.filter(
+    (person) =>
+      person.id !== state.me &&
+      person.connected &&
+      person.view?.productId === product.id,
+  );
+  const addLabel = bagAddLabel(state, variant);
   const shared = state.shareResult?.variantId === variant.id;
   return (
     <section
+      ref={section}
       id="product-dialog"
       className="react-product-page"
       aria-label="Product"
@@ -201,17 +303,10 @@ export function Product({
         </div>
       )}
       <div id="product-detail" className="react-product-detail">
-        <Photo
-          className="product-media detail-media"
-          src={variant.image || product.image}
-          alt={product.name}
-        />
+        <ProductGallery product={product} variant={variant} />
         <div className="product-copy">
-          <p className="eyebrow">
-            {state.storefront?.name || "Sample collection"}
-          </p>
           <h2 id="product-heading" tabIndex={-1}>
-            {product.name}
+            {product.name || "Untitled product"}
           </h2>
           <p className="detail-price">{money(variant)}</p>
           <p>{product.description}</p>
@@ -239,21 +334,7 @@ export function Product({
             <button
               className="primary"
               aria-disabled={addLabel !== "Add to bag"}
-              onClick={() => {
-                if (person && addLabel === "Add to bag")
-                  store.bag.change("add", {
-                    productId: product.id,
-                    variantId: variant.id,
-                    quantity: 0,
-                    name: product.name,
-                    image: variant.image || product.image,
-                    variant: variant.title,
-                    cents: variant.cents,
-                    currency: variant.currency,
-                    available: variant.available,
-                    pickedBy: person,
-                  });
-              }}
+              onClick={() => addVariant(state, store, product, variant)}
             >
               {addLabel}
             </button>

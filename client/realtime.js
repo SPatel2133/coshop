@@ -1,3 +1,4 @@
+import { roomUrl } from "./room-url.js";
 // getRandomValues also works on a plain-HTTP LAN preview; randomUUID is limited
 // to secure contexts on phones. Membership credentials come from the server.
 export function navigationId() {
@@ -80,11 +81,8 @@ export class RoomConnection {
     const generation = ++this.generation;
     this.ready = false;
     this.onStatus(false);
-    const url = new URL(
-      "/api/rooms/" + this.invite + "/socket",
-      location.origin,
-    );
-    url.protocol = location.protocol === "https:" ? "wss:" : "ws:";
+    const url = roomUrl("/api/rooms/" + this.invite + "/socket");
+    url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
     const socket = (this.socket = new WebSocket(url));
     const deadline = setTimeout(() => {
       if (!this.ready) socket.close();

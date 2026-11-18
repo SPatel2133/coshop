@@ -1,4 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { AmbientArt } from "./ambient-art.jsx";
 import { Face } from "./ui.jsx";
 
 const avatars = ["sage", "clay", "butter", "lilac", "sky", "rose"];
@@ -7,14 +8,13 @@ export function Header({ room }) {
   return (
     <header className="react-header">
       <a className="wordmark" aria-label="CoShop home" href="/">
-        coshop<span aria-hidden="true">↗</span>
+        CoShop<span aria-hidden="true">↗</span>
       </a>
       {!room && (
         <nav aria-label="Main">
           <a href="/#how-it-works">How it works</a>
         </nav>
       )}
-      {room && <span>{room.name}</span>}
     </header>
   );
 }
@@ -23,29 +23,10 @@ export function Footer() {
   return (
     <footer className="site-footer">
       <a className="wordmark" href="/">
-        coshop<span aria-hidden="true">↗</span>
+        CoShop<span aria-hidden="true">↗</span>
       </a>
       <a href="/#how-it-works">How it works</a>
     </footer>
-  );
-}
-
-function AsciiArtwork() {
-  const artwork = Array.from({ length: 40 }, (_, y) =>
-    Array.from({ length: 80 }, (_, x) => {
-      const dx = (x - 40) / 31;
-      const dy = (y - 20) / 18;
-      const radius = Math.hypot(dx, dy);
-      const wave = Math.sin(dx * 5 + 0.8) * Math.cos(dy * 6 - 0.4);
-      return radius < 1.1
-        ? " .:+*#"[Math.min(5, Math.floor(Math.abs(wave) * (1.1 - radius) * 7))]
-        : " ";
-    }).join(""),
-  ).join("\n");
-  return (
-    <div className="landing-art" aria-hidden="true">
-      <pre>{artwork}</pre>
-    </div>
   );
 }
 
@@ -70,24 +51,15 @@ export function Landing({ start }) {
     <main id="landing" className="site-landing">
       <section className="react-landing">
         <div className="landing-intro">
-          <p className="eyebrow">A shared shopping room</p>
-          <h1>
-            Good finds.
-            <br />
-            Better together.
-          </h1>
-          <p>
-            Browse at your own pace, send friends the exact things you like, and
-            decide what goes in one shared bag.
-          </p>
+          <h1>CoShop</h1>
+          <p>Find it. Share it. Shop together.</p>
           <div className="landing-actions">
             <button className="primary" onClick={() => start()}>
-              Start a shopping room <span aria-hidden="true">↗</span>
+              Start a shopping room
             </button>
           </div>
-          <p className="fine">Invite up to nine friends. No accounts needed.</p>
         </div>
-        <AsciiArtwork />
+        <AmbientArt />
       </section>
       <section
         ref={guide}
@@ -118,11 +90,12 @@ export function Landing({ start }) {
 }
 export function Entry({ state, enter }) {
   const heading = useRef(null);
+  const nameInput = useRef(null);
+  const [nameError, setNameError] = useState(false);
   useLayoutEffect(() => heading.current?.focus({ preventScroll: true }), []);
   return (
     <main id="entry" className="react-entry">
       <section className="entry-card">
-        <p className="eyebrow">A seat for you</p>
         <h1 ref={heading} tabIndex={-1}>
           {state.joining ? "Join your people." : "Make yourself at home."}
         </h1>
@@ -133,11 +106,19 @@ export function Entry({ state, enter }) {
         </p>
         <form
           id="identity-form"
+          noValidate
           onSubmit={(event) => {
             event.preventDefault();
             const fields = new FormData(event.currentTarget);
+            const name = String(fields.get("name") || "").trim();
+            if (!name) {
+              setNameError(true);
+              nameInput.current.focus();
+              return;
+            }
+            setNameError(false);
             enter({
-              name: fields.get("name"),
+              name,
               avatar: fields.get("avatar"),
               roomName: fields.get("roomName") || "",
               catalogMode: fields.get("catalogMode") || "sample",
@@ -146,7 +127,7 @@ export function Entry({ state, enter }) {
         >
           {!state.joining && (
             <label>
-              Name your room <span className="fine">optional</span>
+              Room Name (Optional)
               <input
                 id="room-name"
                 name="roomName"
@@ -156,15 +137,26 @@ export function Entry({ state, enter }) {
             </label>
           )}
           <label>
-            What should we call you?
+            Name (required)
             <input
+              ref={nameInput}
               id="display-name"
+              aria-invalid={nameError || undefined}
+              aria-describedby={nameError ? "name-error" : undefined}
+              onChange={(event) => {
+                if (event.target.value.trim()) setNameError(false);
+              }}
               name="name"
               maxLength={32}
               placeholder="Your name"
               required
             />
           </label>
+          {nameError && (
+            <p id="name-error" role="alert" className="form-error">
+              Enter your name.
+            </p>
+          )}
           {!state.joining && (
             <label>
               Catalog
@@ -183,7 +175,7 @@ export function Entry({ state, enter }) {
             </label>
           )}
           <fieldset className="react-avatars">
-            <legend>Pick a little you</legend>
+            <legend>Avatar</legend>
             {avatars.map((avatar) => (
               <label key={avatar}>
                 <input

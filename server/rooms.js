@@ -113,11 +113,20 @@ export async function roomHttp(
           "Choose a sample or Shopify room.",
         );
       if (mode === "shopify") {
-        storefront = await rooms.storefronts?.provider.load();
+        const provider = rooms.storefronts?.provider;
+        if (!provider || provider.configurationIssue)
+          throw new RoomError(
+            "SHOPIFY_UNAVAILABLE",
+            provider?.configurationIssue === "invalid"
+              ? "The Shopify store configuration is invalid. Choose Sample catalog or try again after it is corrected."
+              : "No Shopify store is configured. Choose Sample catalog to continue.",
+            503,
+          );
+        storefront = await provider.load();
         if (!storefront)
           throw new RoomError(
             "SHOPIFY_UNAVAILABLE",
-            "The Shopify demo is unavailable. Try again or start a sample room.",
+            "Shopify could not load the catalog right now. Retry or choose Sample catalog.",
             503,
           );
       }

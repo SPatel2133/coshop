@@ -1,10 +1,18 @@
+:root {
+  --sailcloth: #F7F4EC;
+  --soft-white: #FFFDF8;
+  --navy: #1E303B;
+  --sea: #2C5D73;
+  --mist: #DCEAF0;
+  --apricot: #F9E1CB;
+}
 /* CoShop storefront. Existing fonts, palette and avatar colors are shared. */
 :root {
   --ink: #242820;
-  --muted: #62665b;
-  --paper: #f8f7f4;
-  --sheet: #fffefa;
-  --sage-paper: #edf0e5;
+  --muted: #425766;
+  --paper: var(--sailcloth);
+  --sheet: var(--soft-white);
+  --sage-paper: var(--mist);
   --edge: #d9ddd1;
   --control-edge: #858a7d;
   --motion-ease: cubic-bezier(0.22, 0.7, 0.25, 1);
@@ -20,7 +28,7 @@
   display: none !important;
 }
 #root :where(button, input, select, textarea, summary, a):focus-visible {
-  outline: 2px solid #456a47;
+  outline: 2px solid var(--sea);
   outline-offset: 3px;
 }
 #root :where(button, a) {
@@ -81,7 +89,7 @@
 .react-header .wordmark {
   color: var(--ink);
   font-size: 25px;
-  font-weight: 800;
+  font-weight: 500;
   text-decoration: none;
   letter-spacing: -0.075em;
 }
@@ -216,7 +224,7 @@
   outline-offset: 1px;
 }
 .react-avatars input:focus-visible + .face {
-  outline: 2px solid #456a47;
+  outline: 2px solid var(--sea);
   outline-offset: 3px;
 }
 .react-room {
@@ -277,8 +285,8 @@
   border-radius: 999px;
   padding: 2px 5px;
   font-size: 11px;
-  font-weight: 700;
-  background: #dbe4ce;
+  font-weight: 500;
+  background: var(--mist);
 }
 .confirmed-cue {
   animation: confirm-count 420ms var(--motion-ease) both;
@@ -286,7 +294,7 @@
 @keyframes confirm-count {
   30% {
     transform: scale(1.17);
-    background: #b5c9a4;
+    background: #afccd9;
   }
 }
 .react-notice {
@@ -366,7 +374,7 @@
 }
 @keyframes share-arrival {
   from {
-    background: #ccdbba;
+    background: var(--mist);
     transform: translateX(6px);
   }
   to {
@@ -494,7 +502,7 @@
 }
 .detail-price {
   font-size: 24px;
-  font-weight: 700;
+  font-weight: 500;
 }
 .react-product-actions {
   display: flex;
@@ -547,12 +555,12 @@
 }
 .react-tabs button {
   flex: 1;
-  font-weight: 700;
+  font-weight: 500;
   border-radius: 0;
   border-bottom: 2px solid transparent;
 }
 .react-tabs button[aria-selected="true"] {
-  border-bottom-color: #536747;
+  border-bottom-color: var(--sea);
 }
 .tab-count {
   color: var(--muted);
@@ -748,11 +756,23 @@ html.coshop-modal-open body {
   background: #ebece3;
   place-items: center;
 }
+#peek-dialog .peek-person {
+  margin-block-end: var(--space-12);
+}
+
 .peek-photo img {
   width: 100%;
   height: 100%;
   min-height: 0;
-  object-fit: cover;
+  object-fit: contain;
+}
+
+#peek-dialog .peek-variant {
+  margin: 0 0 var(--space-4);
+}
+
+#peek-dialog > .primary.full {
+  margin-block-start: var(--space-16);
 }
 .react-modal .peek-card h3 {
   font-size: 25px;
@@ -772,11 +792,7 @@ html.coshop-modal-open body {
   width: 100%;
   max-height: calc(100dvh - 164px);
 }
-#root #finds-drawer.react-activity-dock .react-activity {
-  max-height: calc(100dvh - 164px);
-  min-height: 0;
-  height: auto;
-}
+
 #finds-drawer .react-activity {
   border: 0;
   border-radius: 0;
@@ -921,10 +937,6 @@ html.coshop-modal-open body {
     min-height: 100%;
     height: auto;
   }
-  #finds-drawer .react-find-list,
-  #finds-drawer .react-messages {
-    max-height: 42dvh;
-  }
 }
 @media (prefers-reduced-motion: reduce) {
   #root *,
@@ -988,7 +1000,7 @@ html.coshop-modal-open body {
 }
 .site-footer .wordmark {
   font-size: 21px;
-  font-weight: 800;
+  font-weight: 500;
   letter-spacing: -0.055em;
 }
 .site-footer .wordmark span {
@@ -1001,20 +1013,6 @@ html.coshop-modal-open body {
 .landing-intro h1 {
   font-size: clamp(42px, 6vw, 88px);
   letter-spacing: -0.065em;
-}
-.landing-art {
-  container-type: inline-size;
-  min-width: 0;
-  display: grid;
-  place-items: center;
-  padding: 24px 10px;
-  border-radius: 14px;
-  background: #e8eddf;
-  color: #315741;
-}
-.landing-art pre {
-  margin: 0;
-  font: 600 2cqi/0.94 monospace;
 }
 .home-guide {
   border-top: 1px solid var(--edge);
@@ -1058,13 +1056,13 @@ html.coshop-modal-open body {
 .react-bag-button {
   order: 5;
   margin-inline: auto 0;
-  background: #315741;
-  border-color: #315741;
-  color: #fffefa;
+  background: var(--sea);
+  border-color: var(--sea);
+  color: var(--soft-white);
 }
 .react-bag-button .react-count {
-  color: #244332;
-  background: #e5eddf;
+  color: #234c60;
+  background: var(--mist);
 }
 .react-checkout-note,
 .react-recap-shortcut {
@@ -1156,7 +1154,7 @@ html.coshop-modal-open body {
 }
 @media (hover: hover) and (pointer: fine) {
   .react-bag-button:hover {
-    background: #244332;
+    background: #234c60;
   }
 }
 @media (max-width: 520px) {
@@ -1184,12 +1182,14 @@ html.coshop-modal-open body {
 
 /* CoShop design tokens */
 :root {
-  --paper: #faf8f4;
-  --sheet: #fff;
-  --ink: #21211e;
-  --muted: #615d55;
-  --edge: #e1dbd0;
-  --accent: #32523f;
+  --paper: var(--sailcloth);
+  --sheet: var(--soft-white);
+  --ink: var(--navy);
+  --muted: #425766;
+  --edge: var(--mist);
+  --button-edge: #a3b9c3;
+  --button-sheet: var(--soft-white);
+  --accent: var(--sea);
   --space-0: 0;
   --space-4: 4px;
   --space-8: 8px;
@@ -1206,8 +1206,8 @@ html.coshop-modal-open body {
   --bag-feedback: 150ms ease-out;
 }
 @font-face {
-  font-family: Geist;
-  src: url("@fontsource-variable/geist/files/geist-latin-wght-normal.woff2")
+  font-family: "DM Sans";
+  src: url("@fontsource-variable/dm-sans/files/dm-sans-latin-wght-normal.woff2")
     format("woff2");
   font-weight: 100 900;
   font-display: swap;
@@ -1221,13 +1221,11 @@ html.coshop-modal-open body {
 }
 :root {
   font:
-    16px/1.5 Geist,
+    16px/1.5 "DM Sans",
     system-ui,
     sans-serif;
 }
-.face,
-.landing-art pre,
-.solo-bag-art {
+.face {
   font-family: "Geist Mono", ui-monospace, monospace;
 }
 .react-header,
@@ -1271,7 +1269,7 @@ html.coshop-modal-open body {
 .react-room-head h1 {
   font-size: 30px;
   line-height: 36px;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: normal;
 }
 .react-room-tools {
@@ -1292,7 +1290,7 @@ html.coshop-modal-open body {
 .catalog-heading h2 {
   font-size: 28px;
   line-height: 34px;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: normal;
 }
 .catalog-heading {
@@ -1312,19 +1310,19 @@ html.coshop-modal-open body {
   margin-top: var(--space-12);
 }
 .react-grid .product-media {
-  aspect-ratio: 4/3;
+  aspect-ratio: 4 / 5;
   width: 100%;
-  max-width: 298.67px;
-  border-radius: 12px;
+  border-radius: 2px;
 }
 .react-card-copy {
   gap: var(--space-4);
   padding-block: var(--space-8) 0;
 }
+.react-card-copy,
 .react-card-copy h3 {
-  font-size: 16px;
-  line-height: 22px;
-  font-weight: 600;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 400;
 }
 .react-card-copy,
 .detail-price,
@@ -1343,7 +1341,7 @@ html.coshop-modal-open body {
 #root :where(.primary, .secondary, .quiet, .category-chip, .react-bag-button) {
   font-size: 14px;
   line-height: 20px;
-  font-weight: 600;
+  font-weight: 500;
   transition:
     background-color var(--control-feedback),
     border-color var(--control-feedback),
@@ -1363,13 +1361,13 @@ html.coshop-modal-open body {
 #root .react-bag-button {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--soft-white);
 }
 #root .react-modal h2,
 #root .react-activity h2 {
   font-size: 20px;
   line-height: 26px;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: normal;
 }
 #root .react-modal {
@@ -1440,22 +1438,15 @@ html.coshop-modal-open body {
   justify-items: start;
   gap: var(--space-8);
 }
-.solo-bag-art {
-  white-space: pre;
-  margin: 0;
-  width: 10ch;
-  height: 6em;
-  line-height: 1.2;
-}
 .confirmed-cue {
   animation: confirm-count var(--bag-feedback) both;
 }
 @keyframes confirm-count {
   from {
-    background: #b5c9a4;
+    background: #afccd9;
   }
   to {
-    background: #dbe4ce;
+    background: var(--mist);
   }
 }
 @media (max-width: 767px) {
@@ -1481,12 +1472,8 @@ html.coshop-modal-open body {
     font-size: 32px;
     line-height: 38px;
   }
-  .react-card-copy h3 {
-    font-size: 18px;
-    line-height: 24px;
-  }
   #root #finds-drawer.react-activity-dock {
-    width: 352px;
+    width: 360px;
     box-shadow: -8px 0 24px #21211e1a;
   }
 }
@@ -1511,14 +1498,14 @@ html.coshop-modal-open body {
     :is(.primary, .react-bag-button):hover:not(:disabled):not(
       [aria-disabled="true"]
     ) {
-    background: #274433;
+    background: #234c60;
   }
 }
 #root
   :is(.primary, .react-bag-button):active:not(:disabled):not(
     [aria-disabled="true"]
   ) {
-  background: #1e3628;
+  background: #193d50;
 }
 
 .react-entry {
@@ -1537,10 +1524,8 @@ html.coshop-modal-open body {
   }
 }
 
-.react-grid [data-product="chair"] .product-media img {
-  object-fit: contain;
-}
-@media (min-width: 768px) {
+
+@media (min-width: 1180px) {
   #root:has(#finds-drawer.react-activity-dock[open]) {
     --drawer-inset: max(
       0px,
@@ -1561,5 +1546,399 @@ html.coshop-modal-open body {
 @media (min-width: 1200px) {
   #root:has(#finds-drawer.react-activity-dock[open]) .react-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+#root .react-presence {
+  background: var(--soft-white);
+  border-color: #ddd8ce;
+}
+
+#root :where(button, [role="tab"]) {
+  --sheet: var(--button-sheet);
+  --edge: var(--button-edge);
+  --ink: var(--navy);
+  --muted: #425766;
+}
+
+#root :where(h1, h2, h3, strong, legend) {
+  font-weight: 500;
+}
+
+#root .react-card-copy h3 {
+  font-weight: 400;
+}
+
+#root .detail-price {
+  font-weight: 400;
+}
+
+
+/* The landing keeps its decorative glyphs outside the reading area. */
+#root .react-landing {
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  min-height: min(660px, calc(100svh - 80px));
+  grid-template-columns: minmax(0, 1fr);
+  place-items: center;
+  padding: var(--space-64) var(--page-gutter);
+  overflow: hidden;
+  text-align: center;
+}
+
+.landing-intro {
+  z-index: 1;
+  justify-items: center;
+}
+
+.landing-intro > p {
+  font-size: clamp(16px, 2vw, 22px);
+}
+
+.landing-ambient {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  pointer-events: none;
+}
+
+#root .landing-motion {
+  position: absolute;
+  inset-inline-end: var(--page-gutter);
+  inset-block-end: var(--space-16);
+  min-height: 44px;
+}
+
+.activity-launcher {
+  position: relative;
+}
+
+.find-live-notice {
+  position: absolute;
+  z-index: 8;
+  inset: calc(100% + var(--space-4)) auto auto 0;
+  inline-size: max-content;
+  max-inline-size: min(212px, 80vw);
+  pointer-events: none;
+}
+
+.find-live-notice span {
+  display: block;
+  padding: var(--space-4) var(--space-12);
+  border: 1px solid var(--edge);
+  border-radius: 999px;
+  background: var(--sheet);
+  color: var(--ink);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 1180px) {
+  .activity-launcher {
+    position: fixed;
+    z-index: 11;
+    inset: 50% 0 auto auto;
+    transform: translateY(-50%);
+  }
+
+  #root:has(#finds-drawer.react-activity-dock[open]) .activity-launcher {
+    inset-inline-end: 360px;
+  }
+
+  #root .activity-launcher .activity-launch {
+    writing-mode: vertical-rl;
+    min-height: 150px;
+    border-radius: 8px 0 0 8px;
+    background: var(--soft-white);
+  }
+
+  .activity-launch .react-count {
+    writing-mode: horizontal-tb;
+  }
+
+  .find-live-notice {
+    inset: 50% calc(100% + var(--space-8)) auto auto;
+    transform: translateY(-50%);
+  }
+}
+
+#root .react-product {
+  background: transparent;
+  border-radius: 0;
+}
+
+.react-find {
+  background: var(--soft-white);
+  color: var(--navy);
+}
+
+.react-product-detail .detail-media {
+  background: transparent;
+  color: var(--navy);
+}
+
+#root :is(.primary, .react-bag-button):is(:disabled, [aria-disabled="true"]) {
+  background: var(--mist);
+  color: var(--navy);
+  border-color: #a3b9c3;
+  opacity: 0.72;
+}
+
+#root .category-chip[aria-pressed="true"],
+#root .react-tabs [aria-selected="true"] {
+  background: var(--mist);
+  color: var(--navy);
+  border-color: var(--sea);
+}
+
+#root .find-live-notice span {
+  background: var(--apricot);
+  color: var(--navy);
+}
+
+#root #finds-drawer .react-activity {
+  overflow: hidden;
+  min-height: 0;
+}
+
+.react-activity > :is(header, .activity-people, .react-tabs) {
+  flex: 0 0 auto;
+}
+
+.react-activity .activity-people {
+  max-block-size: min(32dvh, 144px);
+  overflow-y: auto;
+}
+
+.react-activity :is(.react-panel-body, .react-thread, .react-find-list, .react-messages) {
+  flex: 1 1 0;
+  min-block-size: 0;
+  max-block-size: none;
+}
+
+.react-activity .react-tabs [aria-selected="true"] {
+  border-bottom: 2px solid var(--sea);
+}
+
+.room-composer {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-8);
+  align-items: end;
+  padding-block-start: var(--space-8);
+  background: var(--soft-white);
+  border-block-start: 1px solid var(--mist);
+}
+
+.room-composer textarea {
+  inline-size: 100%;
+  min-block-size: 44px;
+  max-block-size: min(112px, 22dvh);
+  field-sizing: content;
+  overflow-y: auto;
+  resize: none;
+}
+
+.room-composer .composer-status {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.room-composer .composer-status:empty {
+  display: none;
+}
+
+.room-composer .quick-comment-tools {
+  grid-row: 1;
+  grid-column: 2;
+}
+
+.react-product-detail .detail-media {
+  --detail-photo-height: min(58dvh, 640px);
+  max-block-size: var(--detail-photo-height);
+}
+
+.react-product-detail .detail-media:has(img) {
+  inline-size: fit-content;
+  max-inline-size: 100%;
+  aspect-ratio: auto;
+  justify-self: end;
+}
+
+.react-product-detail .detail-media img {
+  width: auto;
+  height: auto;
+  max-inline-size: 100%;
+  max-block-size: var(--detail-photo-height);
+  object-fit: contain;
+}
+
+@media (min-width: 761px) {
+  .react-product-page {
+    max-inline-size: 950px;
+    margin-inline: auto;
+  }
+
+  .react-product-page > button {
+    /* Offset the visible label by the existing 13px padding and 1px border. */
+    margin-inline-start: calc(var(--back-media-inset, 0px) - 14px);
+  }
+
+  .react-product-detail {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+    gap: 32px;
+  }
+
+  .react-product-detail h2 {
+    font-size: clamp(30px, 3.4vw, 48px);
+  }
+}
+
+@media (max-width: 760px) {
+  .react-product-detail .detail-media {
+    --detail-photo-height: 32dvh;
+  }
+
+  .react-product-detail .detail-media:has(img) {
+    justify-self: center;
+  }
+}
+
+.product-tile {
+  position: relative;
+  min-width: 0;
+}
+
+#root .react-card-copy > span {
+  color: var(--muted);
+}
+
+#root .product-tile > .react-product {
+  width: 100%;
+}
+
+#root .tile-quick-add {
+  position: absolute;
+  inset-block-start: 8px;
+  inset-inline-end: 8px;
+  width: 44px;
+  padding: 0;
+  border-radius: 50%;
+  border-color: transparent;
+  background: transparent;
+  color: var(--navy);
+  font-size: 20px;
+}
+
+.tile-quick-add span {
+  display: grid;
+  place-items: center;
+  inline-size: 34px;
+  block-size: 34px;
+  border: 1px solid var(--button-edge);
+  border-radius: 50%;
+  background: var(--soft-white);
+}
+
+#root .tile-quick-add:is(:hover, :focus-visible) {
+  background: transparent;
+}
+
+.tile-quick-add:is(:hover, :focus-visible) span {
+  background: var(--mist);
+}
+
+.quick-add-content,
+.quick-add-content label {
+  display: grid;
+  gap: var(--space-12);
+}
+
+.quick-add-content h2 {
+  padding-inline-end: 76px;
+}
+
+.quick-add-content .fine {
+  margin: 0;
+  min-height: 1.25em;
+}
+
+.product-gallery {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  --gallery-height: min(58dvh, 640px);
+}
+
+.react-product-detail .product-gallery .detail-media {
+  flex: 0 1 auto;
+  min-inline-size: 0;
+  inline-size: min(100%, calc(var(--gallery-height) * 0.8));
+  aspect-ratio: 4 / 5;
+}
+
+.react-product-detail .product-gallery .detail-media img {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: contain;
+}
+
+.thumbnail-rail {
+  display: flex;
+  flex: none;
+  gap: 8px;
+}
+
+.thumbnail-rail button {
+  flex: none;
+  inline-size: 56px;
+  block-size: 70px;
+  padding: 0;
+  border: 1px solid var(--edge);
+  border-radius: 2px;
+  background: var(--soft-white);
+}
+
+.thumbnail-rail button[aria-pressed="true"] {
+  border-color: var(--sea);
+  box-shadow: 0 0 0 1px var(--sea);
+}
+
+.thumbnail-rail img {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+}
+
+@media (min-width: 920px) {
+  .product-gallery {
+    flex-direction: row-reverse;
+    align-items: flex-start;
+    justify-content: flex-start;
+  }
+
+  .thumbnail-rail {
+    flex-direction: column;
+  }
+
+  #root:has(#finds-drawer.react-activity-dock[open]) .product-gallery {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  #root:has(#finds-drawer.react-activity-dock[open]) .thumbnail-rail {
+    flex-direction: row;
+  }
+}
+
+@media (max-width: 760px) {
+  .product-gallery {
+    --gallery-height: 32dvh;
   }
 }

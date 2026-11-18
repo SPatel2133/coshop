@@ -170,7 +170,7 @@ for (const worker of [false, true])
       assert.equal(final.items.length, 1);
       assert.equal(final.items[0].quantity, 2);
       assert.equal(final.items[0].pickedBy.id, shoppers[first].me);
-      assert.equal(final.items[0].name, "A little quiet");
+      assert.equal(final.items[0].name, "Over-Ear Headphones");
       assert.deepEqual(final.totals, [{ currency: "CAD", cents: 29800 }]);
       for (const client of clients) {
         const update = await client.wait(

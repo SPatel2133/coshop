@@ -14,7 +14,7 @@ export const countItems = (n) => n + (n === 1 ? " item" : " items");
 export const focus = (node) => node?.focus({ preventScroll: true });
 export const visible = (node) =>
   node?.isConnected && node.getClientRects().length;
-export const wideQuery = "(min-width: 768px)";
+export const wideQuery = "(min-width: 1180px)";
 
 export function useMedia(query) {
   const [matches, set] = useState(() => matchMedia(query).matches);

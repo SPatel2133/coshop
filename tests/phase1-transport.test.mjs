@@ -1,3 +1,4 @@
+import { get } from "node:http";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { launch, api, socket, delay } from "./support/rooms.mjs";
@@ -211,3 +212,67 @@ for (const worker of [false, true])
       assert.equal(large.status, 413);
     },
   );
+
+test("Cloudflare split frontend preflight, CORS responses and WSS origin", { timeout: 30000 }, async (t) => {
+  const origin = "https://coshop-preview.example";
+  const outsider = "https://outside.example";
+  const { base } = await launch(t, true, {
+    TEST_PORT: "14351",
+    ROOM_FRONTEND_ORIGIN: origin,
+    CREATE_LIMIT_PER_HOUR: "1",
+  });
+  const url = base + "/api/rooms";
+  const options = (from, headers = "content-type, authorization") =>
+    fetch(url, { method: "OPTIONS", headers: {
+      Origin: from,
+      "Access-Control-Request-Method": "POST",
+      "Access-Control-Request-Headers": headers,
+    } });
+  const allowed = await options(origin);
+  assert.equal(allowed.status, 204);
+  assert.equal(allowed.headers.get("access-control-allow-origin"), origin);
+  assert.match(allowed.headers.get("vary"), /Origin/i);
+  assert.equal(allowed.headers.get("access-control-allow-credentials"), null);
+  assert.equal((await options(outsider)).status, 403);
+  assert.equal((await options(origin, "X-Other")).status, 403);
+  const create = (from) => fetch(url, { method: "POST", headers: {
+    Origin: from, "Content-Type": "application/json",
+  }, body: JSON.stringify({ name: "Preview tester", avatar: "sage" }) });
+  assert.equal((await create(outsider)).headers.get("access-control-allow-origin"), null);
+  const created = await create(origin);
+  assert.equal(created.status, 201);
+  assert.equal(created.headers.get("access-control-allow-origin"), origin);
+  const { invite, token, me } = await created.json();
+  const limited = await create(origin);
+  assert.equal(limited.status, 429);
+  assert.equal(limited.headers.get("access-control-allow-origin"), origin);
+
+  const connection = socket(base, invite, token, origin);
+  t.after(() => connection.ws.terminate());
+  assert.equal((await connection.wait((m) => m.type === "state")).me, me);
+  const status = await new Promise((resolve, reject) => {
+    const request = get(base + "/api/rooms/" + invite + "/socket", {
+      headers: {
+        Origin: outsider,
+        Connection: "Upgrade",
+        Upgrade: "websocket",
+        "Sec-WebSocket-Version": "13",
+        "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
+      },
+    }, (res) => {
+      res.resume();
+      res.on("end", () => resolve(res.statusCode));
+      res.on("error", reject);
+    });
+    request.on("upgrade", (_response, socket) => {
+      socket.destroy();
+      reject(new Error("A foreign origin received a WebSocket upgrade."));
+    });
+    request.on("error", reject);
+  });
+  assert.equal(status, 403);
+  await new Promise((resolve) => {
+    connection.ws.once("close", resolve);
+    connection.ws.close();
+  });
+});

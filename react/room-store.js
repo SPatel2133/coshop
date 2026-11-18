@@ -1,3 +1,4 @@
+import { roomUrl } from "../client/room-url.js";
 import { catalog as sample } from "../catalog.mjs";
 import { RoomConnection, navigationId } from "../client/realtime.js";
 import {
@@ -34,15 +35,17 @@ async function request(path, { token, body } = {}) {
   let response;
   let result;
   try {
-    response = await fetch(path, {
+    response = await fetch(roomUrl(path), {
       method: body === undefined ? "GET" : "POST",
       headers: {
-        "Content-Type": "application/json",
+        ...(body === undefined ? {} : { "Content-Type": "application/json" }),
         ...(token ? { Authorization: "Bearer " + token } : {}),
       },
       body: body === undefined ? undefined : JSON.stringify(body),
       signal: AbortSignal.timeout(path.endsWith("/checkout") ? 22000 : 12000),
       cache: "no-store",
+      credentials: "omit",
+      redirect: "error",
     });
     result = await response.json();
   } catch {

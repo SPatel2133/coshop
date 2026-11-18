@@ -1,7 +1,13 @@
+import samplePhotos from "./sample-photos.json" with { type: "json" };
+
+const photos = new Set(samplePhotos);
+const photoUrl = (id) => "/assets/catalog-" + id + ".webp";
+const variantPhotoId = (id, index) => id === "audio" && index === 0 ? id : id + "-" + index;
+
 const products = [
   [
     "bag",
-    "Everyday carry",
+    "Backpack",
     "A backpack for the library, the long way home, and everything in between.",
     "Accessories",
     4800,
@@ -10,7 +16,7 @@ const products = [
   ],
   [
     "audio",
-    "A little quiet",
+    "Over-Ear Headphones",
     "Over-ear headphones for a softer soundtrack to your everyday.",
     "Audio",
     14900,
@@ -19,7 +25,7 @@ const products = [
   ],
   [
     "chair",
-    "The reading chair",
+    "Reading Chair",
     "A generous seat. A quiet corner. A little room to slow down.",
     "Home",
     18900,
@@ -28,7 +34,7 @@ const products = [
   ],
   [
     "camera",
-    "Take the long way",
+    "Mirrorless Camera",
     "A compact camera for the moments you almost walked past.",
     "Objects",
     24900,
@@ -37,7 +43,7 @@ const products = [
   ],
   [
     "shoe",
-    "Off-duty sneakers",
+    "Sneakers",
     "Everyday sneakers with a clean profile and a cushioned sole.",
     "Wear",
     9500,
@@ -46,7 +52,7 @@ const products = [
   ],
   [
     "watch",
-    "Time well spent",
+    "Wristwatch",
     "An everyday watch with a legible dial and understated proportions.",
     "Accessories",
     7900,
@@ -55,7 +61,7 @@ const products = [
   ],
   [
     "cap",
-    "Weekend cap",
+    "Hat",
     "A soft cotton cap for long walks and slow mornings.",
     "Wear",
     2600,
@@ -64,7 +70,7 @@ const products = [
   ],
   [
     "tee",
-    "The everyday tee",
+    "Everyday Tee",
     "An easy cotton T-shirt with a relaxed fit.",
     "Wear",
     3200,
@@ -73,7 +79,7 @@ const products = [
   ],
   [
     "denim",
-    "Blue hour jeans",
+    "Jeans",
     "Straight-leg denim for everything from lectures to late dinners.",
     "Wear",
     7800,
@@ -82,7 +88,7 @@ const products = [
   ],
   [
     "jacket",
-    "Between seasons",
+    "Leather Jacket",
     "A light jacket for the days that start cool and end warm.",
     "Wear",
     9600,
@@ -91,7 +97,7 @@ const products = [
   ],
   [
     "sunglasses",
-    "Sunny side",
+    "Sunglasses",
     "Sunglasses with a simple frame and lenses made for bright days.",
     "Accessories",
     3900,
@@ -100,7 +106,7 @@ const products = [
   ],
   [
     "ring",
-    "A small orbit",
+    "Ring",
     "A slim ring with a simple rounded band.",
     "Accessories",
     3400,
@@ -109,7 +115,7 @@ const products = [
   ],
   [
     "necklace",
-    "Little keepsake",
+    "Pendant Necklace",
     "A pendant necklace on a fine chain.",
     "Accessories",
     5400,
@@ -118,7 +124,7 @@ const products = [
   ],
   [
     "speaker",
-    "Songs for the kitchen",
+    "Portable Speaker",
     "A portable speaker for playlists, picnics and lazy afternoons.",
     "Audio",
     6900,
@@ -127,7 +133,7 @@ const products = [
   ],
   [
     "earbuds",
-    "Small sound",
+    "Wireless Earbuds",
     "Wireless earbuds with a pocket-sized charging case.",
     "Audio",
     8900,
@@ -136,7 +142,7 @@ const products = [
   ],
   [
     "record-player",
-    "Side A",
+    "Record Player",
     "A record player for your favourite albums on vinyl.",
     "Audio",
     17900,
@@ -145,7 +151,7 @@ const products = [
   ],
   [
     "lamp",
-    "Afterglow",
+    "Table Lamp",
     "A table lamp for a warm pool of light after sunset.",
     "Home",
     6400,
@@ -154,7 +160,7 @@ const products = [
   ],
   [
     "plant",
-    "A little green",
+    "Potted Plant",
     "A leafy houseplant with a simple pot.",
     "Home",
     2800,
@@ -163,7 +169,7 @@ const products = [
   ],
   [
     "sofa",
-    "Slow Sunday",
+    "Sofa",
     "A sofa for coffee, reading and one more episode.",
     "Home",
     49900,
@@ -172,7 +178,7 @@ const products = [
   ],
   [
     "pillow",
-    "Soft landing",
+    "Throw Pillow",
     "A cushion to make a sofa or reading corner more inviting.",
     "Home",
     3600,
@@ -181,7 +187,7 @@ const products = [
   ],
   [
     "notebook",
-    "Open notes",
+    "Notebook",
     "A notebook for lists, sketches and half-formed ideas.",
     "Objects",
     1800,
@@ -190,7 +196,7 @@ const products = [
   ],
   [
     "mug",
-    "First cup",
+    "Coffee Mug",
     "A mug for the first hot drink of the day.",
     "Objects",
     2400,
@@ -199,7 +205,7 @@ const products = [
   ],
   [
     "bottle",
-    "Take a sip",
+    "Water Bottle",
     "A reusable water bottle for classes and day trips.",
     "Objects",
     2900,
@@ -208,7 +214,7 @@ const products = [
   ],
   [
     "book",
-    "A quiet chapter",
+    "Paperback Book",
     "A pocket paperback to take on the train or leave by the bed.",
     "Objects",
     2100,
@@ -223,12 +229,14 @@ export const catalog = products.map(
     description,
     category,
     image:
+      (photos.has(id) && photoUrl(id)) ||
       "https://images.unsplash.com/" +
       photo +
       "?auto=format&fit=crop&w=900&q=85",
     variants: options.map((title, i) => ({
       id: id + "-" + i,
       title,
+      ...(photos.has(variantPhotoId(id, i)) ? { image: photoUrl(variantPhotoId(id, i)) } : {}),
       cents,
       currency: "CAD",
       available: !(id === "shoe" && i === 2),

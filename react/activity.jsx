@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { DialogClose, exact, focus, money, useMedia } from "./ui.jsx";
+import { DialogClose, exact, focus, money } from "./ui.jsx";
 import { validDraft } from "./discussion-model.js";
 
 const time = new Intl.DateTimeFormat(undefined, {
@@ -7,31 +7,6 @@ const time = new Intl.DateTimeFormat(undefined, {
   timeStyle: "short",
 });
 const empty = {};
-
-const bagFrames = [0, 1, 2, 3].map((position) =>
-  ["         ", "   ___   ", "  /   \u005c  ", " |     | ", " |_____| "]
-    .map((line, row) =>
-      row === position ? line.slice(0, 4) + "*" + line.slice(5) : line,
-    )
-    .join("\n"),
-);
-
-function SoloBag() {
-  const reduced = useMedia("(prefers-reduced-motion: reduce)");
-  const [frame, setFrame] = useState(0);
-  useEffect(() => {
-    if (reduced) return;
-    const timers = [1, 2, 3].map((index) =>
-      setTimeout(() => setFrame(index), index * 250),
-    );
-    return () => timers.forEach(clearTimeout);
-  }, [reduced]);
-  return (
-    <pre className="solo-bag-art" aria-hidden="true">
-      {bagFrames[reduced ? 3 : frame]}
-    </pre>
-  );
-}
 
 function Composer({ id, online, store, quick, finish, cancel }) {
   const state = store.discussion.feed(id);
@@ -44,7 +19,7 @@ function Composer({ id, online, store, quick, finish, cancel }) {
   }, [quick]);
   return (
     <form
-      className={quick ? "quick-comment" : "react-composer"}
+      className={quick ? "quick-comment" : id ? "react-composer" : "react-composer room-composer"}
       onSubmit={async (event) => {
         event.preventDefault();
         const form = event.currentTarget;
@@ -60,16 +35,18 @@ function Composer({ id, online, store, quick, finish, cancel }) {
       }}
     >
       <label>
-        {id ? "Comment on this find" : "Message the room"}
+        <span className={id ? undefined : "sr-only"}>
+          {id ? "Comment on this find" : "Message the room"}
+        </span>
         <textarea
           ref={input}
           value={state.draft}
           maxLength={400}
-          rows={2}
+          rows={id ? 2 : 1}
           onChange={(event) => store.discussion.edit(id, event.target.value)}
         />
       </label>
-      <p className="fine" role="status">
+      <p className="fine composer-status" role="status">
         {state.error || (!online ? "Reconnect to send." : "")}
       </p>
       <div className="quick-comment-tools">
@@ -81,7 +58,7 @@ function Composer({ id, online, store, quick, finish, cancel }) {
         <button
           type="submit"
           className="primary"
-          aria-disabled={!online || !validDraft(state.draft) || state.pending}
+          disabled={!online || !validDraft(state.draft) || state.pending}
         >
           {state.pending ? "Sending…" : id ? "Post comment" : "Send"}
         </button>
@@ -195,7 +172,7 @@ function Thread({ id, online, store, find, back, active, memory }) {
                 ? "Reconnect to load messages."
                 : id
                   ? "No comments yet."
-                  : "Start the conversation."}
+                  : "Say hi or ask what everyone’s looking for."}
           </li>
         )}
         {entries.map((entry) => (
@@ -403,7 +380,6 @@ export function Activity({
   active,
   anchors,
   quickToken,
-  openPanel,
   invite,
 }) {
   const section = useRef(null);
@@ -520,7 +496,6 @@ export function Activity({
             >
               Invite a friend
             </button>
-            {openPanel && <SoloBag />}
           </div>
         )}
       </div>
@@ -577,11 +552,6 @@ export function Activity({
       >
         {showFinds ? (
           <>
-            <p className="fine">
-              {state.online
-                ? "Shared finds stay here for everyone."
-                : "Reconnecting… Saved finds stay here."}
-            </p>
             <div
               className="react-find-list"
               id="finds-list"
@@ -592,8 +562,7 @@ export function Activity({
             >
               {!state.cards.length && (
                 <p className="react-empty">
-                  Something worth showing a friend? Share it from its product
-                  page.
+                  No shared finds yet. Share one from a product page.
                 </p>
               )}
               {state.cards.map((card) => (

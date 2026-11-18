@@ -118,6 +118,8 @@ const assetTypes = {
 function clientAsset(pathname) {
   if (pathname === "/" || pathname === "/index.html")
     return ["index.html", "text/html; charset=utf-8"];
+  if (/^\/assets\/catalog-[a-z0-9-]+\.webp$/.test(pathname))
+    return [pathname.slice(1), "image/webp"];
   const generated = /^\/assets\/[a-zA-Z0-9_.-]+\.(js|css|woff2)$/.exec(
     pathname,
   );

@@ -1,0 +1,252 @@
+{
+  "audio-0": [
+    {
+      "src": "/assets/catalog-audio-side.webp",
+      "view": "side profile"
+    },
+    {
+      "src": "/assets/catalog-audio-detail.webp",
+      "view": "ear cushion and hinge close-up"
+    }
+  ],
+  "audio-1": [
+    {
+      "src": "/assets/catalog-audio-1-side.webp",
+      "view": "side profile"
+    },
+    {
+      "src": "/assets/catalog-audio-1-detail.webp",
+      "view": "ear cushion and hinge close-up"
+    }
+  ],
+  "bag": [
+    {
+      "src": "/assets/catalog-bag-side.webp",
+      "view": "rear three-quarter view showing both straps"
+    },
+    {
+      "src": "/assets/catalog-bag-detail.webp",
+      "view": "zipper and fabric close-up"
+    }
+  ],
+  "chair": [
+    {
+      "src": "/assets/catalog-chair-side.webp",
+      "view": "rear three-quarter view showing the full frame"
+    },
+    {
+      "src": "/assets/catalog-chair-detail.webp",
+      "view": "upholstery and armrest joint close-up"
+    }
+  ],
+  "camera": [
+    {
+      "src": "/assets/catalog-camera-side.webp",
+      "view": "rear three-quarter view showing the screen and controls"
+    },
+    {
+      "src": "/assets/catalog-camera-detail.webp",
+      "view": "lens barrel and grip close-up"
+    }
+  ],
+  "shoe": [
+    {
+      "src": "/assets/catalog-shoe-side.webp",
+      "view": "rear three-quarter view showing the heel and sole edge"
+    },
+    {
+      "src": "/assets/catalog-shoe-detail.webp",
+      "view": "lacing and upper texture close-up"
+    }
+  ],
+  "watch": [
+    {
+      "src": "/assets/catalog-watch-side.webp",
+      "view": "side three-quarter view showing case thickness"
+    },
+    {
+      "src": "/assets/catalog-watch-detail.webp",
+      "view": "crown and strap attachment close-up"
+    }
+  ],
+  "cap": [
+    {
+      "src": "/assets/catalog-cap-side.webp",
+      "view": "rear three-quarter view showing the closure"
+    },
+    {
+      "src": "/assets/catalog-cap-detail.webp",
+      "view": "brim stitching and fabric close-up"
+    }
+  ],
+  "tee": [
+    {
+      "src": "/assets/catalog-tee-side.webp",
+      "view": "back flat lay showing the entire shirt"
+    },
+    {
+      "src": "/assets/catalog-tee-detail.webp",
+      "view": "collar and cotton texture close-up"
+    }
+  ],
+  "denim": [
+    {
+      "src": "/assets/catalog-denim-side.webp",
+      "view": "back flat lay showing pockets and silhouette"
+    },
+    {
+      "src": "/assets/catalog-denim-detail.webp",
+      "view": "denim stitching and pocket close-up"
+    }
+  ],
+  "jacket": [
+    {
+      "src": "/assets/catalog-jacket-side.webp",
+      "view": "rear three-quarter view showing both sleeves"
+    },
+    {
+      "src": "/assets/catalog-jacket-detail.webp",
+      "view": "lapel, stitching, and zipper close-up"
+    }
+  ],
+  "sunglasses": [
+    {
+      "src": "/assets/catalog-sunglasses-side.webp",
+      "view": "side three-quarter view showing the temple arms"
+    },
+    {
+      "src": "/assets/catalog-sunglasses-detail.webp",
+      "view": "hinge and frame finish close-up"
+    }
+  ],
+  "ring": [
+    {
+      "src": "/assets/catalog-ring-side.webp",
+      "view": "low three-quarter view showing the setting"
+    },
+    {
+      "src": "/assets/catalog-ring-detail.webp",
+      "view": "stone and prong close-up"
+    }
+  ],
+  "necklace": [
+    {
+      "src": "/assets/catalog-necklace-side.webp",
+      "view": "alternate overhead arrangement showing chain and pendant"
+    },
+    {
+      "src": "/assets/catalog-necklace-detail.webp",
+      "view": "pendant and bail close-up"
+    }
+  ],
+  "speaker": [
+    {
+      "src": "/assets/catalog-speaker-side.webp",
+      "view": "opposite three-quarter view showing the end cap"
+    },
+    {
+      "src": "/assets/catalog-speaker-detail.webp",
+      "view": "fabric grille and control detail"
+    }
+  ],
+  "earbuds": [
+    {
+      "src": "/assets/catalog-earbuds-side.webp",
+      "view": "closed charging case beside both earbuds"
+    },
+    {
+      "src": "/assets/catalog-earbuds-detail.webp",
+      "view": "earbud and charging contacts close-up"
+    }
+  ],
+  "record-player": [
+    {
+      "src": "/assets/catalog-record-player-side.webp",
+      "view": "high three-quarter view showing the platter and tonearm"
+    },
+    {
+      "src": "/assets/catalog-record-player-detail.webp",
+      "view": "tonearm and headshell close-up"
+    }
+  ],
+  "lamp": [
+    {
+      "src": "/assets/catalog-lamp-side.webp",
+      "view": "opposite side view showing the whole lamp and base"
+    },
+    {
+      "src": "/assets/catalog-lamp-detail.webp",
+      "view": "shade and adjustment joint close-up"
+    }
+  ],
+  "plant": [
+    {
+      "src": "/assets/catalog-plant-side.webp",
+      "view": "higher side view showing foliage and the whole pot"
+    },
+    {
+      "src": "/assets/catalog-plant-detail.webp",
+      "view": "leaves and pot rim close-up"
+    }
+  ],
+  "sofa": [
+    {
+      "src": "/assets/catalog-sofa-side.webp",
+      "view": "three-quarter side view showing the full sofa"
+    },
+    {
+      "src": "/assets/catalog-sofa-detail.webp",
+      "view": "upholstery seam and armrest close-up"
+    }
+  ],
+  "pillow": [
+    {
+      "src": "/assets/catalog-pillow-side.webp",
+      "view": "side three-quarter view showing its thickness"
+    },
+    {
+      "src": "/assets/catalog-pillow-detail.webp",
+      "view": "fabric weave and edge seam close-up"
+    }
+  ],
+  "notebook": [
+    {
+      "src": "/assets/catalog-notebook-side.webp",
+      "view": "spine-side view showing the whole notebook"
+    },
+    {
+      "src": "/assets/catalog-notebook-detail.webp",
+      "view": "binding and paper edge close-up"
+    }
+  ],
+  "mug": [
+    {
+      "src": "/assets/catalog-mug-side.webp",
+      "view": "opposite three-quarter view with the handle visible"
+    },
+    {
+      "src": "/assets/catalog-mug-detail.webp",
+      "view": "glaze and handle attachment close-up"
+    }
+  ],
+  "bottle": [
+    {
+      "src": "/assets/catalog-bottle-side.webp",
+      "view": "side three-quarter view showing the entire bottle"
+    },
+    {
+      "src": "/assets/catalog-bottle-detail.webp",
+      "view": "cap and neck finish close-up"
+    }
+  ],
+  "book": [
+    {
+      "src": "/assets/catalog-book-side.webp",
+      "view": "three-quarter view showing the spine and page edges"
+    },
+    {
+      "src": "/assets/catalog-book-detail.webp",
+      "view": "binding and paper texture close-up"
+    }
+  ]
+}

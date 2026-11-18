@@ -9,7 +9,7 @@ async function room(page) {
   await page.goto(base);
   await page.getByRole("button", { name: "Start a shopping room" }).click();
   await page
-    .getByRole("textbox", { name: "What should we call you?" })
+    .getByRole("textbox", { name: "Name (required)" })
     .fill("Sam");
   await page.getByRole("button", { name: /Make room/ }).click();
   await expect(page.getByText("Connected", { exact: true })).toBeVisible();
@@ -19,6 +19,8 @@ async function room(page) {
 for (const [width, columns, gap] of [
   [360, 2, 12],
   [768, 3, 16],
+  [1179, 3, 16],
+  [1180, 3, 16],
   [1440, 4, 24],
 ]) {
   test(`catalog geometry and drawer at ${width}px`, async ({ page }) => {
@@ -38,9 +40,8 @@ for (const [width, columns, gap] of [
       };
     });
     expect(grid).toMatchObject({ columns, gap, overflow: false });
-    expect(grid.width / grid.height).toBeCloseTo(4 / 3, 1);
-    expect(grid.height).toBeLessThanOrEqual(224.1);
-    if (process.env.COSHOP_EVIDENCE && width !== 768) {
+    expect(grid.width / grid.height).toBeCloseTo(4 / 5, 2);
+    if (process.env.COSHOP_EVIDENCE && [360, 1440].includes(width)) {
       await expect
         .poll(() =>
           page
@@ -59,21 +60,18 @@ for (const [width, columns, gap] of [
     const drawer = page.getByRole("dialog", { name: "Around the room" });
     await expect(drawer).toBeVisible();
     expect(await drawer.evaluate((node) => node.matches(":modal"))).toBe(
-      width < 768,
+      width < 1180,
     );
     const rect = await drawer.boundingBox();
-    expect(Math.round(rect.width)).toBe(width === 360 ? 344 : 352);
-    if (width >= 768) {
+    expect(Math.round(rect.width)).toBe(width === 360 ? 344 : 360);
+    if (width >= 1180) {
       const search = await page
         .getByRole("searchbox", { name: "Search the collection" })
         .boundingBox();
       expect(search.x + search.width).toBeLessThanOrEqual(rect.x);
     }
-    const art = drawer.locator(".solo-bag-art");
-    const initial = await art.textContent();
-    expect(initial.split("\n")).toHaveLength(5);
-    await expect.poll(() => art.textContent()).not.toBe(initial);
-    if (process.env.COSHOP_EVIDENCE && width !== 768) {
+    await expect(drawer.locator("pre")).toHaveCount(0);
+    if (process.env.COSHOP_EVIDENCE && [360, 1440].includes(width)) {
       await expect
         .poll(() =>
           page
@@ -82,6 +80,7 @@ for (const [width, columns, gap] of [
             .evaluate((img) => img.naturalWidth),
         )
         .toBeGreaterThan(0);
+      await expect(drawer).toHaveCSS("opacity", "1");
       await page.screenshot({
         path: process.env.COSHOP_EVIDENCE + `/drawer-${width}.png`,
       });
@@ -118,13 +117,10 @@ test("reduced motion, offline status, rejected clipboard and zero results", asyn
   await room(page);
   await page.getByRole("button", { name: "Around the room" }).click();
   const drawer = page.locator("#finds-drawer");
-  const art = drawer.locator(".solo-bag-art");
-  const settled = await art.textContent();
   expect(
     await drawer.evaluate((node) => getComputedStyle(node).transitionDuration),
   ).toBe("0s");
   await page.waitForTimeout(850);
-  expect(await art.textContent()).toBe(settled);
   await drawer.getByRole("button", { name: "Invite a friend" }).click();
   await page.getByRole("button", { name: "Copy invite link" }).click();
   await expect(page.getByText("Copy the selected invite link.")).toBeVisible();
@@ -176,7 +172,7 @@ test("exact saved find, stable browsing, one connection and shared haul", async 
     const maya = await friend.newPage();
     await maya.goto(link);
     await maya
-      .getByRole("textbox", { name: "What should we call you?" })
+      .getByRole("textbox", { name: "Name (required)" })
       .fill("Maya");
     await maya.getByRole("button", { name: /Join your people/ }).click();
     await expect(maya.getByText("Connected", { exact: true })).toBeVisible();
@@ -185,51 +181,42 @@ test("exact saved find, stable browsing, one connection and shared haul", async 
     const search = page.getByRole("searchbox", {
       name: "Search the collection",
     });
-    await search.fill("little quiet");
-    await page.getByRole("button", { name: "View A little quiet" }).click();
+    await search.fill("headphones");
+    await page.getByRole("button", { name: "View Over-Ear Headphones" }).click();
     const variant = page.getByRole("combobox", { name: "Choose a variant" });
     await variant.selectOption({ label: "Black" });
     await variant.focus();
     const y = await page.evaluate(() => scrollY);
 
-    await maya.getByRole("button", { name: "View Time well spent" }).click();
+    await maya.getByRole("button", { name: "View Wristwatch" }).click();
     await maya
       .getByRole("combobox", { name: "Choose a variant" })
       .selectOption({ label: "Tan" });
     await maya.getByRole("button", { name: "Share find" }).click();
     await maya.getByRole("button", { name: /Back to the collection/ }).click();
-    await maya.getByRole("button", { name: "View Everyday carry" }).click();
-    const saved = page.getByRole("button", {
-      name: "View find: Time well spent · Tan",
-    });
-    await expect(saved).toBeVisible();
+    await maya.getByRole("button", { name: "View Backpack" }).click();
+    await expect(page.getByText("Maya shared a find.")).toBeVisible();
+    await expect(page.locator("#open-finds")).toHaveAccessibleName("Around the room, 1 unseen");
     await expect(variant).toBeFocused();
     expect(await page.evaluate(() => scrollY)).toBe(y);
     await expect(
       page.getByRole("button", { name: "Shared bag, 0 items" }),
     ).toBeVisible();
-    await saved.click();
-    const peek = page.getByRole("dialog", {
-      name: "Shared find: Time well spent · Tan",
-    });
-    await expect(peek).toBeVisible();
-    await page.keyboard.press("Escape");
-    await expect(saved).toBeFocused();
     await expect(variant.locator("option:checked")).toHaveText("Black");
     await page.getByRole("button", { name: /Back to the collection/ }).click();
-    await expect(search).toHaveValue("little quiet");
+    await expect(search).toHaveValue("headphones");
     await expect(
-      page.getByRole("button", { name: "View A little quiet" }),
+      page.getByRole("button", { name: "View Over-Ear Headphones" }),
     ).toBeFocused();
 
     await page.getByRole("button", { name: /Around the room/ }).click();
     const drawer = page.getByRole("dialog", { name: "Around the room" });
     await drawer
-      .getByRole("button", { name: "Comment on Time well spent · Tan" })
+      .getByRole("button", { name: "Comment on Wristwatch · Tan" })
       .click();
     await drawer.getByRole("textbox").fill("Keep the exact variant");
     await drawer
-      .getByRole("button", { name: "View find: Time well spent · Tan" })
+      .getByRole("button", { name: "View find: Wristwatch · Tan" })
       .click();
     await page.keyboard.press("Escape");
     await expect(drawer.getByRole("textbox")).toHaveValue(
@@ -238,7 +225,7 @@ test("exact saved find, stable browsing, one connection and shared haul", async 
     await page.keyboard.press("Escape");
     await expect(drawer).toBeHidden();
 
-    await page.getByRole("button", { name: "View A little quiet" }).click();
+    await page.getByRole("button", { name: "View Over-Ear Headphones" }).click();
     await page.getByRole("button", { name: "Add to bag" }).click();
     await expect(
       maya.getByRole("button", { name: "Shared bag, 1 item" }),
@@ -262,7 +249,7 @@ test("short drawer, failed product photos and 200% reflow", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.route("https://images.unsplash.com/**", (route) => route.abort());
+  await page.route(/images\.unsplash\.com|\/assets\/catalog-/, (route) => route.abort());
   await room(page);
   await expect(
     page.locator("#products").getByText("Image unavailable").first(),
@@ -279,7 +266,7 @@ test("short drawer, failed product photos and 200% reflow", async ({
         };
       });
   expect(await measure()).toMatchObject({ overflow: false });
-  expect((await measure()).ratio).toBeCloseTo(4 / 3, 1);
+  expect((await measure()).ratio).toBeCloseTo(4 / 5, 2);
   // A 720 CSS-pixel viewport exercises the reflow space available at 200% on 1440.
   await page.setViewportSize({ width: 720, height: 450 });
   expect((await measure()).overflow).toBe(false);
@@ -374,12 +361,12 @@ test("long shared bag remains usable in a short mobile viewport", async ({
   await room(page);
   let quantity = 0;
   for (const name of [
-    "Everyday carry",
-    "A little quiet",
-    "The reading chair",
-    "Take the long way",
-    "Time well spent",
-    "Weekend cap",
+    "Backpack",
+    "Over-Ear Headphones",
+    "Reading Chair",
+    "Mirrorless Camera",
+    "Wristwatch",
+    "Hat",
   ]) {
     await page
       .getByRole("button", { name: "View " + name, exact: true })
@@ -405,4 +392,422 @@ test("long shared bag remains usable in a short mobile viewport", async ({
   await expect(
     page.getByRole("button", { name: "Shared bag, 6 items" }),
   ).toBeFocused();
+});
+
+test("required participant names block requests and trim valid Unicode names", async ({ page, browser }) => {
+  const guest = await browser.newContext();
+  try {
+    const guestPage = await guest.newPage();
+    await page.goto(base);
+    await page.getByRole("button", { name: "Start a shopping room" }).click();
+
+    async function enter(target, action, name) {
+      const input = target.getByRole("textbox", { name: "Name (required)" });
+      const submit = target.getByRole("button", { name: action });
+      const submitted = [];
+      target.on("request", (request) => {
+        if (request.method() === "POST" &&
+            /\/api\/rooms(?:\/[^/]+\/join)?$/.test(request.url())) {
+          submitted.push(request.postDataJSON().name);
+        }
+      });
+      await submit.click();
+      await expect(input).toBeFocused();
+      await expect(input).toHaveAccessibleDescription("Enter your name.");
+      await input.fill("   ");
+      await input.press("Enter");
+      await expect(input).toBeFocused();
+      await expect(input).toHaveAttribute("aria-invalid", "true");
+      expect(submitted).toEqual([]);
+      await input.fill("  " + name + "  ");
+      await expect(input).not.toHaveAttribute("aria-invalid");
+      await input.press("Enter");
+      await expect(target.getByText("Connected", { exact: true })).toBeVisible();
+      expect(submitted).toEqual([name]);
+    }
+
+    await enter(page, /Make room/, "Élodie");
+    await page.getByRole("button", { name: "Invite", exact: true }).click();
+    const link = await page.getByRole("dialog").locator("input").inputValue();
+    await guestPage.goto(link);
+    await enter(guestPage, /Join your people/, "Zoë");
+  } finally {
+    await guest.close();
+  }
+});
+
+
+test("landing canvas animates, pauses, and respects reduced motion", async ({ page }) => {
+  for (const width of [360, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(base);
+    const title = page.getByRole("heading", { name: "CoShop", exact: true });
+    await expect(title).toBeVisible();
+    await expect(page.getByText("Find it. Share it. Shop together.", { exact: true })).toBeVisible();
+    const canvas = page.locator(".landing-ambient");
+    const image = () => canvas.evaluate((node) => node.toDataURL());
+    await expect(canvas).toHaveCSS("pointer-events", "none");
+    const first = await image();
+    await expect.poll(image).not.toBe(first);
+    const toggle = page.getByRole("button", { name: "Background motion" });
+    await toggle.click();
+    await expect(toggle).toHaveText("Motion off");
+    const stopped = await image();
+    await page.waitForTimeout(150);
+    expect(await image()).toBe(stopped);
+    if (process.env.COSHOP_EVIDENCE)
+      await page.screenshot({ path: process.env.COSHOP_EVIDENCE + `/landing-${width}.png` });
+    await toggle.click();
+  }
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect(page.getByRole("button", { name: "Background motion" })).toBeDisabled();
+  const stopped = await page.locator(".landing-ambient").evaluate((node) => node.toDataURL());
+  await page.waitForTimeout(150);
+  expect(await page.locator(".landing-ambient").evaluate((node) => node.toDataURL())).toBe(stopped);
+});
+
+test("unconfigured Shopify preserves the form and lets the shopper choose sample", async ({ page }) => {
+  await page.goto(base);
+  await page.getByRole("button", { name: "Start a shopping room" }).click();
+  const roomName = page.getByRole("textbox", { name: "Room Name (Optional)" });
+  const name = page.getByRole("textbox", { name: "Name (required)" });
+  const avatar = page.getByRole("radio", { name: "sky avatar" });
+  const catalog = page.getByRole("combobox", { name: "Catalog" });
+  await roomName.fill("Friday Finds");
+  await name.fill("Sam");
+  await avatar.check();
+  await catalog.selectOption("shopify");
+  const submit = page.getByRole("button", { name: /Make room/ });
+  await submit.click();
+  await expect(page.getByRole("alert")).toContainText("No Shopify store is configured");
+  await expect(roomName).toHaveValue("Friday Finds");
+  await expect(name).toHaveValue("Sam");
+  await expect(avatar).toBeChecked();
+  await expect(catalog).toHaveValue("shopify");
+  await catalog.selectOption("sample");
+  await submit.click();
+  await expect(page.getByRole("heading", { name: "Friday Finds" })).toBeVisible();
+  await expect(page.locator("#products h3").nth(3)).toHaveText("Mirrorless Camera");
+});
+
+test("three shoppers converge on exact finds across repeats, refresh, and explicit add", async ({ browser, page }) => {
+  const contexts = await Promise.all([browser.newContext(), browser.newContext()]);
+  const [maya, priya] = await Promise.all(contexts.map((context) => context.newPage()));
+  const pages = [page, maya, priya];
+  const panel = (shopper) => shopper.getByRole("dialog", { name: "Around the room" });
+  const cards = (shopper) => panel(shopper).locator("[data-find]");
+  const variant = (shopper) => shopper.getByRole("combobox", { name: "Choose a variant" });
+  const headphones = (shopper) => shopper.getByRole("button", { name: "View Over-Ear Headphones" });
+  try {
+    for (const shopper of pages) await shopper.setViewportSize({ width: 1440, height: 900 });
+    await room(page);
+    await page.getByRole("button", { name: "Invite", exact: true }).click();
+    const link = await page.getByRole("textbox", { name: "Invitation link" }).inputValue();
+    await page.keyboard.press("Escape");
+    await Promise.all([[maya, "Maya"], [priya, "Priya"]].map(async ([shopper, name]) => {
+      await shopper.goto(link);
+      await shopper.getByRole("textbox", { name: "Name (required)" }).fill(name);
+      await shopper.getByRole("button", { name: /Join your people/ }).click();
+      await expect(shopper.getByText("Connected", { exact: true })).toBeVisible();
+    }));
+    const query = page.getByRole("searchbox");
+    await query.fill("headphones");
+    await query.focus();
+    const y = await page.evaluate(() => scrollY);
+    await Promise.all([headphones(maya).click(), headphones(priya).click()]);
+    await variant(priya).selectOption({ label: "Black" });
+    const share = (shopper) => shopper.getByRole("button", { name: "Share find" }).click();
+    await Promise.all([share(maya), share(priya)]);
+    await expect(page.locator("#open-finds")).toHaveAccessibleName("Around the room, 2 unseen");
+    await expect(query).toBeFocused();
+    expect(await page.evaluate(() => scrollY)).toBe(y);
+    await expect(page.locator("#open-bag")).toHaveAccessibleName("Shared bag, 0 items");
+    await expect(page.locator(".find-live-notice span")).toBeHidden({ timeout: 4500 });
+    await variant(priya).selectOption({ label: "Stone" });
+    await share(priya);
+    await expect(page.locator(".find-live-notice span")).toBeHidden();
+    await expect(page.locator("#open-finds")).toHaveAccessibleName("Around the room, 2 unseen");
+    for (const shopper of pages) await shopper.locator("#open-finds").click();
+    const ids = (shopper) => cards(shopper).evaluateAll((nodes) =>
+      nodes.map((node) => node.dataset.findVariant));
+    for (const shopper of pages) await expect(cards(shopper)).toHaveCount(2);
+    const order = await ids(page);
+    expect(await ids(maya)).toEqual(order);
+    expect(await ids(priya)).toEqual(order);
+    const stone = (shopper) => cards(shopper).filter({ hasText: "Stone" });
+    await expect(stone(page)).toContainText("Shared by Maya");
+    await expect(stone(page)).toContainText("Priya shared this again");
+    if (process.env.COSHOP_EVIDENCE) {
+      await expect(panel(page)).toHaveCSS("opacity", "1");
+      await page.screenshot({ path: process.env.COSHOP_EVIDENCE + "/finds-1440.png" });
+      await page.setViewportSize({ width: 360, height: 900 });
+      await expect.poll(() => panel(page).evaluate((node) => node.matches(":modal"))).toBe(true);
+      await expect(panel(page)).toHaveCSS("opacity", "1");
+      await page.screenshot({ path: process.env.COSHOP_EVIDENCE + "/finds-360.png" });
+      await page.setViewportSize({ width: 1440, height: 900 });
+    }
+    await page.reload();
+    await expect(page.getByText("Connected", { exact: true })).toBeVisible();
+    await expect(page.locator(".find-live-notice span")).toBeHidden();
+    await page.locator("#open-finds").click();
+    await expect(cards(page)).toHaveCount(2);
+    expect(await ids(page)).toEqual(order);
+    await cards(page).filter({ hasText: "Black" }).getByRole("button", { name: "View product" }).click();
+    await expect(variant(page).locator("option:checked")).toHaveText("Black");
+    await expect(variant(maya).locator("option:checked")).toHaveText("Stone");
+    await page.getByRole("button", { name: "Add to bag" }).click();
+    for (const shopper of pages)
+      await expect(shopper.locator("#open-bag")).toHaveAccessibleName("Shared bag, 1 item");
+  } finally {
+    await Promise.all(contexts.map((context) => context.close()));
+  }
+});
+
+test("short drawer keeps chat composer docked and product controls below presence", async ({ page }) => {
+  for (const width of [1440, 360]) {
+    await page.setViewportSize({ width, height: 500 });
+    await room(page);
+    await page.locator("#open-finds").click();
+    const drawer = page.locator("#finds-drawer");
+    await drawer.getByRole("tab", { name: "Chat" }).click();
+    await expect(drawer.getByText("Say hi or ask what everyone’s looking for.")).toBeVisible();
+    const draft = drawer.getByRole("textbox", { name: "Message the room" });
+    const send = drawer.getByRole("button", { name: "Send" });
+    await expect(send).toBeDisabled();
+    const first = await draft.boundingBox();
+    await draft.fill("   ");
+    await expect(send).toBeDisabled();
+    await draft.fill("First line\nSecond line\nThird line\nFourth line");
+    await expect(send).toBeEnabled();
+    expect((await draft.boundingBox()).height).toBeGreaterThan(first.height);
+    const distance = await drawer.evaluate((node) =>
+      node.getBoundingClientRect().bottom -
+      node.querySelector(".room-composer").getBoundingClientRect().bottom);
+    expect(distance).toBeGreaterThan(0);
+    expect(distance).toBeLessThanOrEqual(22);
+    await page.keyboard.press("Escape");
+    await expect(drawer).toBeHidden();
+    await page.locator("#open-finds").click();
+    await expect(draft).toHaveValue(/Fourth line/);
+    await page.keyboard.press("Escape");
+    await expect(drawer).toBeHidden();
+    await page.getByRole("button", { name: "View Table Lamp" }).click();
+    const layout = () => page.evaluate(() => {
+      const bar = document.querySelector(".react-presence").getBoundingClientRect();
+      const detail = document.querySelector("#product-dialog");
+      return {
+        back: detail.querySelector("button").getBoundingClientRect().top - bar.bottom,
+        title: detail.querySelector("h2").getBoundingClientRect().top - bar.bottom,
+        overflow: document.documentElement.scrollWidth > innerWidth,
+      };
+    });
+    await expect.poll(async () => (await layout()).back).toBeGreaterThanOrEqual(0);
+    expect(await layout()).toMatchObject({ overflow: false });
+    expect((await layout()).title).toBeGreaterThan(0);
+    if (process.env.COSHOP_EVIDENCE && width === 1440)
+      await page.screenshot({ path: process.env.COSHOP_EVIDENCE + "/detail-1440.png" });
+    await page.getByRole("button", { name: /Back to the collection/ }).click();
+    await expect(page.getByRole("button", { name: "View Table Lamp" })).toBeFocused();
+    if (process.env.COSHOP_EVIDENCE) {
+      await page.locator("#open-finds").click();
+      await expect(drawer).toHaveCSS("opacity", "1");
+      await page.screenshot({ path: process.env.COSHOP_EVIDENCE + `/chat-${width}.png` });
+    }
+  }
+});
+
+test("quick add shares and adds the exact headphone variant with its photo", async ({ page, browser }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await room(page);
+  const guest = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  try {
+    const peer = await guest.newPage();
+    await page.getByRole("button", { name: "Invite", exact: true }).click();
+    const link = await page.getByRole("textbox", { name: "Invitation link" }).inputValue();
+    await page.keyboard.press("Escape");
+    await peer.goto(link);
+    await peer.getByRole("textbox", { name: "Name (required)" }).fill("Maya");
+    await peer.getByRole("button", { name: /Join your people/ }).click();
+    await expect(peer.getByText("Connected", { exact: true })).toBeVisible();
+
+    await page.getByRole("button", { name: "Audio", exact: true }).click();
+    const search = page.getByRole("searchbox");
+    await search.fill("headphones");
+    const tile = page.getByRole("button", { name: "View Over-Ear Headphones" });
+    const quick = page.getByRole("button", { name: "Quick add Over-Ear Headphones" });
+    const baselineWidth = (await tile.boundingBox()).width;
+    expect((await quick.boundingBox()).width).toBe(44);
+    const before = await page.evaluate(() => scrollY);
+    await quick.press("Enter");
+    const dialog = page.getByRole("dialog", { name: "Over-Ear Headphones" });
+    await expect(page.locator("#product-dialog")).toHaveCount(0);
+    const select = dialog.getByRole("combobox");
+    await select.selectOption("audio-1");
+    await expect(select.locator("option:checked")).toHaveText("Black · CAD 149.00");
+    if (process.env.COSHOP_EVIDENCE) {
+      await expect(dialog).toHaveCSS("opacity", "1");
+      await page.screenshot({ path: process.env.COSHOP_EVIDENCE + "/quick-add.png" });
+    }
+    await dialog.getByRole("button", { name: "Share find" }).click();
+    await expect(dialog.getByText("Shared in Our finds.")).toBeVisible();
+    await peer.locator("#open-finds").click();
+    const black = peer.locator('[data-find-variant="audio-1"]');
+    await expect(black).toContainText("Black · CAD 149.00");
+    await expect(black.locator("img")).toHaveAttribute("src", "/assets/catalog-audio-1.webp");
+    await expect.poll(() => black.locator("img").evaluate(img => img.naturalWidth)).toBeGreaterThan(0);
+    for (const shopper of [page, peer])
+      await expect(shopper.locator("#open-bag")).toHaveAccessibleName("Shared bag, 0 items");
+
+    await dialog.getByRole("button", { name: "Add to bag" }).click();
+    for (const shopper of [page, peer])
+      await expect(shopper.locator("#open-bag")).toHaveAccessibleName("Shared bag, 1 item");
+    await select.selectOption("audio-0");
+    await dialog.getByRole("button", { name: "Share find" }).click({ timeout: 7000 });
+    const stone = peer.locator('[data-find-variant="audio-0"]');
+    await expect(stone).toContainText("Stone · CAD 149.00");
+    await expect(stone.locator("img")).toHaveAttribute("src", "/assets/catalog-audio.webp");
+    await page.keyboard.press("Escape");
+    await expect(quick).toBeFocused();
+    await expect(search).toHaveValue("headphones");
+    await expect(page.getByRole("button", { name: "Audio", exact: true })).toHaveAttribute("aria-pressed", "true");
+    expect(await page.evaluate(() => scrollY)).toBe(before);
+    expect((await tile.boundingBox()).width).toBe(baselineWidth);
+    await peer.locator("#open-finds").click();
+    await peer.locator("#open-bag").click();
+    const line = peer.locator(".react-bag-line");
+    await expect(line).toContainText("Black");
+    await expect(line.locator("img")).toHaveAttribute("src", "/assets/catalog-audio-1.webp");
+    if (process.env.COSHOP_EVIDENCE) {
+      await expect(peer.locator("#bag-drawer")).toHaveCSS("opacity", "1");
+      await peer.screenshot({ path: process.env.COSHOP_EVIDENCE + "/black-headphones-bag.png" });
+    }
+    await tile.click();
+    const photo = page.locator(".detail-media img");
+    await page.locator("#product-variant").selectOption("audio-1");
+    await expect(photo).toHaveAttribute("src", "/assets/catalog-audio-1.webp");
+    await page.locator("#product-variant").selectOption("audio-0");
+    await expect(photo).toHaveAttribute("src", "/assets/catalog-audio.webp");
+    await page.getByRole("button", { name: /Back to the collection/ }).click();
+    await page.getByRole("button", { name: "Everything" }).click();
+    await search.fill("sneakers");
+    await page.getByRole("button", { name: "Quick add Sneakers" }).click();
+    const sneakers = page.getByRole("dialog", { name: "Sneakers" });
+    await sneakers.getByRole("combobox").selectOption("shoe-2");
+    await expect(sneakers.getByRole("button", { name: "Unavailable" })).toBeDisabled();
+  } finally {
+    await guest.close();
+  }
+});
+
+test("product gallery stays fitted and sharing uses the canonical variant photo", async ({ page, browser }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await room(page);
+  const guest = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  try {
+    const peer = await guest.newPage();
+    await page.getByRole("button", { name: "Invite", exact: true }).click();
+    const link = await page.getByRole("textbox", { name: "Invitation link" }).inputValue();
+    await page.keyboard.press("Escape");
+    await peer.goto(link);
+    await peer.getByRole("textbox", { name: "Name (required)" }).fill("Maya");
+    await peer.getByRole("button", { name: /Join your people/ }).click();
+    await expect(peer.getByText("Connected", { exact: true })).toBeVisible();
+
+    await page.getByRole("button", { name: "View Over-Ear Headphones" }).click();
+    const rail = page.getByRole("group", { name: "Product photos" });
+    const buttons = rail.getByRole("button");
+    const photo = page.locator(".detail-media img");
+    const variant = page.locator("#product-variant");
+    await expect(buttons).toHaveCount(3);
+    await expect(rail).toHaveCSS("flex-direction", "column");
+    const frame = await page.locator(".detail-media").boundingBox();
+    const scroll = await page.evaluate(() => scrollY);
+    await buttons.nth(1).click();
+    await expect(buttons.nth(1)).toHaveAttribute("aria-pressed", "true");
+    await expect(photo).toHaveAttribute("src", "/assets/catalog-audio-side.webp");
+    await buttons.nth(2).press("Space");
+    await expect(buttons.nth(2)).toBeFocused();
+    await expect(photo).toHaveAttribute("src", "/assets/catalog-audio-detail.webp");
+    await expect(variant).toHaveValue("audio-0");
+    expect(await page.locator(".detail-media").boundingBox()).toEqual(frame);
+    expect(await page.evaluate(() => scrollY)).toBe(scroll);
+    await variant.selectOption("audio-1");
+    await expect(buttons.first()).toHaveAttribute("aria-pressed", "true");
+    await expect(photo).toHaveAttribute("src", "/assets/catalog-audio-1.webp");
+    await expect(buttons.nth(2).locator("img")).toHaveAttribute("src", "/assets/catalog-audio-1-detail.webp");
+    await buttons.nth(2).click();
+    await page.getByRole("button", { name: "Share find" }).click();
+    await peer.locator("#open-finds").click();
+    const find = peer.locator('[data-find-variant="audio-1"]');
+    await expect(find.locator("img")).toHaveAttribute("src", "/assets/catalog-audio-1.webp");
+    await expect(peer.locator("#open-bag")).toHaveAccessibleName("Shared bag, 0 items");
+    await page.getByRole("button", { name: "Add to bag" }).click();
+    await expect(peer.locator("#open-bag")).toHaveAccessibleName("Shared bag, 1 item");
+    await peer.locator("#open-finds").click();
+    await peer.locator("#open-bag").click();
+    await expect(peer.locator(".react-bag-line img")).toHaveAttribute("src", "/assets/catalog-audio-1.webp");
+
+    await page.locator("#open-finds").click();
+    await expect(rail).toHaveCSS("flex-direction", "row");
+    await page.keyboard.press("Escape");
+    await page.setViewportSize({ width: 360, height: 900 });
+    await expect(rail).toHaveCSS("flex-direction", "row");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(360);
+    await page.route(/catalog-audio(?:-1)?-(?:side|detail)\.webp$/, (route) => route.abort());
+    await page.getByRole("button", { name: /Back to the collection/ }).click();
+    await page.getByRole("button", { name: "View Over-Ear Headphones" }).click();
+    await expect(rail).toHaveCount(0);
+    await expect(photo).toHaveAttribute("src", "/assets/catalog-audio.webp");
+  } finally {
+    await guest.close();
+  }
+});
+
+test("desktop Back label aligns with the gallery and single-photo fallback", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await room(page);
+  await page.getByRole("button", { name: "Audio", exact: true }).click();
+  const search = page.getByRole("searchbox");
+  await search.fill("headphones");
+  const card = page.getByRole("button", { name: "View Over-Ear Headphones" });
+  const catalogScroll = await page.evaluate(() => scrollY);
+  await card.click();
+  const back = page.getByRole("button", { name: /Back to the collection/ });
+  const offsets = () => back.evaluate((node) => {
+    const label = document.createRange();
+    label.selectNodeContents(node);
+    const rect = label.getBoundingClientRect();
+    const media = document.querySelector(".thumbnail-rail") ||
+      document.querySelector(".detail-media");
+    return {
+      gap: Math.abs(rect.left - media.getBoundingClientRect().left),
+      backClearance: rect.top - document.querySelector(".react-presence").getBoundingClientRect().bottom,
+      titleClearance: document.querySelector("#product-heading").getBoundingClientRect().top -
+        document.querySelector(".react-presence").getBoundingClientRect().bottom,
+    };
+  });
+  for (const width of [1440, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect.poll(async () => (await offsets()).gap).toBeLessThanOrEqual(8);
+    expect((await offsets()).backClearance).toBeGreaterThan(0);
+    expect((await offsets()).titleClearance).toBeGreaterThan(0);
+    await page.locator("#open-finds").click();
+    await expect(page.locator(".thumbnail-rail")).toHaveCSS("flex-direction", "row");
+    await expect(back).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+    await page.keyboard.press("Escape");
+    await expect(page.locator(".thumbnail-rail")).toHaveCSS("flex-direction", "column");
+  }
+  await back.click();
+  await expect(card).toBeFocused();
+  await expect(search).toHaveValue("headphones");
+  await expect(page.getByRole("button", { name: "Audio", exact: true })).toHaveAttribute("aria-pressed", "true");
+  expect(await page.evaluate(() => scrollY)).toBe(catalogScroll);
+  await page.route(/catalog-audio-(?:side|detail)\.webp$/, (route) => route.abort());
+  await card.click();
+  await expect(page.locator(".thumbnail-rail")).toHaveCount(0);
+  await expect.poll(async () => (await offsets()).gap).toBeLessThanOrEqual(8);
+  await page.setViewportSize({ width: 360, height: 900 });
+  await expect(back).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(360);
 });

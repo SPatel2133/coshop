@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createBag } from "../react/bag-model.js";
+import sampleGallery from "../react/sample-gallery.json" with { type: "json" };
+import samplePhotos from "../sample-photos.json" with { type: "json" };
 import { launch } from "./support/rooms.mjs";
 
 for (const worker of [false, true]) {
@@ -36,6 +38,16 @@ for (const worker of [false, true]) {
         (await fetch(base + font)).headers.get("content-type"),
         /font\/woff2/,
       );
+      const photoPaths = [
+        ...samplePhotos.map((id) => "/assets/catalog-" + id + ".webp"),
+        ...Object.values(sampleGallery).flat().map(({ src }) => src),
+      ];
+      const photos = await Promise.all(photoPaths.map((path) => fetch(base + path)));
+      for (const photo of photos) {
+        assert.equal(photo.status, 200);
+        assert.equal(photo.headers.get("content-type"), "image/webp");
+        assert.ok((await photo.arrayBuffer()).byteLength > 1000);
+      }
       const missing = await fetch(base + "/api/not-a-route");
       assert.equal(missing.status, 404);
       assert.match(missing.headers.get("content-type"), /json/);
@@ -48,7 +60,7 @@ test("React bag model separates pending rows from accepted quantity and ignores 
   const item = {
     productId: "watch",
     variantId: "watch-1",
-    name: "Time well spent",
+    name: "Wristwatch",
     variant: "Tan",
     quantity: 0,
     cents: 7900,

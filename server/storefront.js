@@ -3,13 +3,16 @@ import { ShopifyClient } from "../shopify.mjs";
 export class Storefront {
   constructor(config, clock = Date.now, client = null) {
     this.clock = clock;
-    if (!config.domain && !config.token && !client) return;
+    this.configurationIssue = !config.domain && !config.token && !client
+      ? "missing"
+      : null;
+    if (this.configurationIssue) return;
     try {
       this.client =
         client ?? new ShopifyClient(config.domain, config.token, config);
       this.key = this.client.domain + ":" + this.client.country;
     } catch {
-      return;
+      this.configurationIssue = "invalid";
     }
   }
   async load() {

@@ -23,6 +23,7 @@ export async function launch(t, worker, extra = {}) {
   };
   const bindings = [
     "INVITE_SIGNING_SECRET",
+    "ROOM_FRONTEND_ORIGIN",
     "JOIN_LIMIT_PER_10_MIN",
     "CREATE_LIMIT_PER_HOUR",
     "ROOM_TTL_MS",
@@ -101,10 +102,10 @@ export async function api(base, path, body, token) {
     headers: response.headers,
   };
 }
-export function socket(base, invite, token) {
+export function socket(base, invite, token, origin = base) {
   const ws = new WebSocket(
     base.replace("http:", "ws:") + "/api/rooms/" + invite + "/socket",
-    { origin: base },
+    { origin },
   );
   const messages = [];
   ws.on("open", () => ws.send(JSON.stringify({ type: "auth", token })));

@@ -62,7 +62,7 @@ test("first share is canonical, creates one find and leaves every bag field unch
   assert.equal(first.ack.ok, true);
   assert.equal(first.ack.find.cents, 14900);
   assert.equal(first.ack.find.sharedBy.id, maya.id);
-  assert.equal(first.ack.find.name, "A little quiet");
+  assert.equal(first.ack.find.name, "Over-Ear Headphones");
   assert.deepEqual(first.ack.bag, before);
   assert.deepEqual(rooms.snapshot(id).bag, before);
   assert.deepEqual(

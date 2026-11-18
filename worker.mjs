@@ -182,6 +182,7 @@ export class RoomObject extends DurableObject {
           "Too many connection messages.",
           429,
         );
+      ws.serializeAttachment(c);
       const message = parseMessage(raw);
       if (!c.person) {
         if (message.type !== "auth" || c.authenticating)
@@ -311,8 +312,27 @@ export class AbuseObject extends DurableObject {
     await this.ctx.storage.deleteAll();
   }
 }
+function roomCors(response, origin) {
+  if (response.status === 101) return response;
+  const headers = new Headers(response.headers);
+  headers.append("Vary", "Origin");
+  if (origin) headers.set("Access-Control-Allow-Origin", origin);
+  return new Response(response.body, { status: response.status, headers });
+}
+
+function allowFrontend(origin, setting) {
+  if (!origin || !setting?.split(",").map((entry) => entry.trim()).includes(origin) || !URL.canParse(origin)) return false;
+  const url = new URL(origin);
+  return url.origin === origin && (
+    url.protocol === "https:" ||
+    (url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname))
+  );
+}
+
 export default {
   async fetch(request, env) {
+    let corsOrigin;
+    let roomRoute = false;
     try {
       const url = new URL(request.url);
       if (!url.pathname.startsWith("/api/")) {
@@ -325,9 +345,9 @@ export default {
           headers,
         });
       }
-      sameOrigin(request);
-      const config = configuration(env);
       if (url.pathname === "/api/shopify/orders-paid") {
+        sameOrigin(request);
+        const config = configuration(env);
         const order = await readPaidWebhook(request, config);
         if (!order) return json({ received: true });
         const response = await env.ROOMS.get(
@@ -341,12 +361,37 @@ export default {
         );
         return response.status === 410 ? json({ received: true }) : response;
       }
-      const create = url.pathname === "/api/rooms" && request.method === "POST";
+      const roomPath = url.pathname === "/api/rooms";
       const match = url.pathname.match(
         /^\/api\/rooms\/([^/]+)(?:\/(join|session|socket|catalog|checkout|checkout-release|haul-demo))?$/,
       );
+      if (!roomPath && !match)
+        throw new RoomError("NOT_FOUND", "Page not found.", 404);
+      roomRoute = true;
+      const origin = request.headers.get("origin");
+      if (allowFrontend(origin, env.ROOM_FRONTEND_ORIGIN)) corsOrigin = origin;
+      else sameOrigin(request);
+      if (request.method === "OPTIONS") {
+        const method = request.headers.get("access-control-request-method");
+        const names = (request.headers.get("access-control-request-headers") || "")
+          .split(",").map((name) => name.trim().toLowerCase()).filter(Boolean);
+        if (!corsOrigin || match?.[2] === "socket" ||
+            !["GET", "POST"].includes(method) ||
+            names.some((name) => !["authorization", "content-type"].includes(name)))
+          throw new RoomError("ORIGIN_DENIED", "Room preflight denied.", 403);
+        return roomCors(new Response(null, {
+          status: 204,
+          headers: {
+            "Access-Control-Allow-Methods": "GET, POST",
+            "Access-Control-Allow-Headers": "Authorization, Content-Type",
+            "Cache-Control": "no-store",
+          },
+        }), corsOrigin);
+      }
+      const create = roomPath && request.method === "POST";
       if (!create && !match)
         throw new RoomError("NOT_FOUND", "Page not found.", 404);
+      const config = configuration(env);
       const bucket = await rateKey(
         config,
         request.headers.get("cf-connecting-ip") || "unknown",
@@ -360,7 +405,7 @@ export default {
           body: JSON.stringify(bucket),
         }),
       );
-      if (!limited.ok) return limited;
+      if (!limited.ok) return roomCors(limited, corsOrigin);
       const id = create
           ? crypto.randomUUID()
           : await verifyInvite(config.secret, match[1]),
@@ -368,7 +413,7 @@ export default {
       if (
         action === "socket" &&
         (request.headers.get("upgrade")?.toLowerCase() !== "websocket" ||
-          request.headers.get("origin") !== url.origin ||
+          (!corsOrigin && origin !== url.origin) ||
           url.search)
       )
         throw new RoomError(
@@ -380,7 +425,7 @@ export default {
       internal.pathname = "/" + action;
       const headers = new Headers(request.headers);
       headers.set("x-room-id", id);
-      return await env.ROOMS.get(env.ROOMS.idFromName(id)).fetch(
+      const response = await env.ROOMS.get(env.ROOMS.idFromName(id)).fetch(
         new Request(internal, {
           method: request.method,
           headers,
@@ -388,8 +433,10 @@ export default {
           redirect: "manual",
         }),
       );
+      return roomCors(response, corsOrigin);
     } catch (error) {
-      return failure(error);
+      const response = failure(error);
+      return roomRoute ? roomCors(response, corsOrigin) : response;
     }
   },
 };

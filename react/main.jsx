@@ -10,13 +10,12 @@ import React, {
 import { createRoot } from "react-dom/client";
 import { createRoomStore } from "./room-store.js";
 import { Entry, Footer, Header, Landing, Status } from "./entry.jsx";
-import { Collection, People, Product } from "./shopping.jsx";
+import { Collection, People, Product, QuickAdd } from "./shopping.jsx";
 import { Activity } from "./activity.jsx";
 import { Invite, Peek } from "./overlays.jsx";
 import { Bag, Haul, HaulBanner } from "./bag.jsx";
 import {
   countItems,
-  exact,
   focus,
   Modal,
   useMedia,
@@ -38,17 +37,15 @@ function Room({ state, store }) {
     quick: null,
   });
   const [notice, setNotice] = useState(null);
-  const [announcing, setAnnouncing] = useState(false);
   const quickToken = useRef(null);
   const anchors = useRef({ finds: 0, threads: new Map() });
   const roomHeading = useRef(null);
   const activityButton = useRef(null);
   const bagButton = useRef(null);
-  const announcementRow = useRef(null);
-  const findButton = useRef(null);
   const trigger = useRef(null);
   const collectionReturn = useRef(null);
   const positionIntent = useRef(null);
+  const detailTop = useRef(null);
   const desktopPanel = wide && panel;
   const activityOpen = panel && (wide || !overlay || overlay.kind === "invite");
   const product =
@@ -62,17 +59,11 @@ function Room({ state, store }) {
   const count = state.bag.confirmed?.totalQuantity || 0;
 
   useEffect(() => {
-    const incoming = state.incoming;
-    if (!incoming || panel || document.activeElement === findButton.current)
-      return;
-    const bounds = announcementRow.current.getBoundingClientRect();
-    if (bounds.bottom <= 0 || bounds.top >= innerHeight) return;
-    setNotice(incoming);
-    setAnnouncing(true);
+    if (state.incoming && !panel) setNotice(state.incoming);
   }, [state.incoming]);
   useEffect(() => {
     if (!notice) return;
-    const timer = setTimeout(() => setAnnouncing(false), 3200);
+    const timer = setTimeout(() => setNotice(null), 3000);
     return () => clearTimeout(timer);
   }, [notice]);
 
@@ -93,6 +84,11 @@ function Room({ state, store }) {
     trigger.current = from;
     setOverlay({ kind, ...data });
   }
+
+  const quickAdd = useCallback((product, opener) => {
+    trigger.current = opener;
+    setOverlay({ kind: "quick-add", product });
+  }, []);
 
   function finish(action) {
     const origin = trigger.current;
@@ -164,20 +160,8 @@ function Room({ state, store }) {
     positionIntent.current = null;
     if (intent === "product") {
       const heading = document.querySelector("#product-heading");
-      const section = document.querySelector("#product-dialog");
       focus(heading);
-      const sticky = document.querySelector(".react-presence").offsetHeight;
-      const headingBounds = heading?.getBoundingClientRect();
-      const sectionBounds = section?.getBoundingClientRect();
-      const sectionFits =
-        headingBounds &&
-        sectionBounds &&
-        headingBounds.bottom - sectionBounds.top <= innerHeight - sticky - 36;
-      const top =
-        innerWidth <= 760 && sectionFits
-          ? sectionBounds.top
-          : headingBounds?.top;
-      if (top != null) scrollTo(0, Math.max(0, scrollY + top - sticky - 18));
+      alignDetail();
     } else {
       const back = collectionReturn.current;
       const card = [...document.querySelectorAll("[data-product]")].find(
@@ -188,6 +172,37 @@ function Room({ state, store }) {
       collectionReturn.current = null;
     }
   }, [state.view]);
+
+  function alignDetail() {
+    const section = document.querySelector("#product-dialog");
+    const presence = document.querySelector(".react-presence");
+    if (!section || !presence) return;
+    const top = section.getBoundingClientRect().top + scrollY;
+    scrollTo(0, Math.max(0, top - presence.offsetHeight - 12));
+    detailTop.current = scrollY;
+  }
+
+  useLayoutEffect(() => {
+    if (!showingProduct) {
+      detailTop.current = null;
+      return;
+    }
+    const presence = document.querySelector(".react-presence");
+    const section = document.querySelector("#product-dialog");
+    const correct = () => {
+      if (detailTop.current == null || scrollY > detailTop.current + 80) return;
+      const bar = presence.getBoundingClientRect();
+      if (section.getBoundingClientRect().top < bar.bottom + 4) alignDetail();
+    };
+    const resize = new ResizeObserver(correct);
+    resize.observe(presence);
+    resize.observe(section);
+    window.addEventListener("resize", correct);
+    return () => {
+      resize.disconnect();
+      window.removeEventListener("resize", correct);
+    };
+  }, [showingProduct]);
 
   function navigate(place) {
     if (place.product) openProduct(place.product, place.variant.id);
@@ -212,19 +227,10 @@ function Room({ state, store }) {
     restore(activityButton.current);
   }
 
-  function preview(find, node, fromPanel = true) {
-    open("peek", node, { find, fromPanel });
+  function preview(find, node) {
+    open("peek", node, { find, fromPanel: true });
   }
 
-  const isResolvable =
-    notice &&
-    state.products.some(
-      (product) =>
-        product.id === notice.find.productId &&
-        product.variants.some(
-          (variant) => variant.id === notice.find.variantId,
-        ),
-    );
   return (
     <main id="room" className="react-room">
       <div className="react-room-head">
@@ -245,27 +251,33 @@ function Room({ state, store }) {
             )}
           </span>
 
-          <button
-            ref={activityButton}
-            id="open-finds"
-            className="secondary activity-launch"
-            aria-expanded={panel}
-            aria-haspopup="dialog"
-            aria-controls="finds-drawer"
-            aria-label={
-              "Around the room" +
-              (state.unseen ? ", " + state.unseen + " unseen" : "")
-            }
-            onClick={() => {
-              if (panel) return closePanel();
-              setPanel(true);
-            }}
-          >
-            Around the room{" "}
-            {state.unseen > 0 && (
-              <span className="react-count">{state.unseen}</span>
-            )}
-          </button>
+          <div className="activity-launcher">
+            <button
+              ref={activityButton}
+              id="open-finds"
+              className="secondary activity-launch"
+              aria-expanded={panel}
+              aria-haspopup="dialog"
+              aria-controls="finds-drawer"
+              aria-label={
+                "Around the room" +
+                (state.unseen ? ", " + state.unseen + " unseen" : "")
+              }
+              onClick={() => {
+                if (panel) return closePanel();
+                setNotice(null);
+                setPanel(true);
+              }}
+            >
+              Around the room{" "}
+              {state.unseen > 0 && (
+                <span className="react-count">{state.unseen}</span>
+              )}
+            </button>
+            <div className="find-live-notice" role="status" aria-atomic="true">
+              {notice && !panel && <span>{notice.sender} shared a find.</span>}
+            </div>
+          </div>
           <button
             className="secondary"
             onClick={(event) => open("invite", event.currentTarget)}
@@ -282,7 +294,7 @@ function Room({ state, store }) {
         products={state.products}
         peek={(person, node) => open("peek", node, { person })}
       >
-        <div ref={announcementRow} className="react-share-slot">
+        <div className="react-share-slot">
           <button
             ref={bagButton}
             id="open-bag"
@@ -317,33 +329,7 @@ function Room({ state, store }) {
               open={(node) => open("haul", node)}
             />
           )}
-          <span className="sr-only" role="status" aria-atomic="true">
-            {announcing && notice
-              ? notice.sender + " shared " + notice.find.name
-              : ""}
-          </span>
-          {notice && (
-            <div key={notice.id} className="react-share-message">
-              <span>
-                {announcing
-                  ? notice.sender + " shared " + notice.find.name
-                  : exact(notice.find)}
-              </span>
-              {isResolvable && (
-                <button
-                  id="view-new-find"
-                  ref={findButton}
-                  className="quiet"
-                  aria-label={"View find: " + exact(notice.find)}
-                  onClick={(event) =>
-                    preview(notice.find, event.currentTarget, false)
-                  }
-                >
-                  View find ↗
-                </button>
-              )}
-            </div>
-          )}
+
         </div>
       </People>
       <div
@@ -356,6 +342,7 @@ function Room({ state, store }) {
             products={state.products}
             storefront={state.storefront}
             hidden={showingProduct}
+            quickAdd={quickAdd}
             {...{ category, query, setQuery, chooseCategory, openProduct }}
           />
           {showingProduct && (
@@ -389,7 +376,6 @@ function Room({ state, store }) {
             <Activity
               {...{ state, store, social, setSocial, preview, quickToken }}
               active={panel && !overlay}
-              openPanel={activityOpen}
               invite={(node) => open("invite", node)}
               anchors={anchors.current}
               close={() => dismiss()}
@@ -398,6 +384,9 @@ function Room({ state, store }) {
           )}
         </Modal>
       </div>
+      {overlay?.kind === "quick-add" && (
+        <QuickAdd product={overlay.product} state={state} store={store} close={finish} />
+      )}
       {overlay?.kind === "invite" && (
         <Invite room={state.room} invite={state.invite} finish={finish} />
       )}
