@@ -40,3 +40,5 @@ For production, capture the actual prior frontend deployment and paired backend 
 - Production Worker: `https://coshop.coshop-portfolio-2133.workers.dev`, version `12dfaac2-d8e6-4c2b-8189-be241e7ada56`. Its signing secret, room state and abuse-limit storage are separate from preview. Its cross-origin allowlist is the stable Vercel origin.
 - The existing Sites URL and preview URL remain available for rooms created there. New portfolio links should point to the stable Vercel origin. Keep that origin and its Worker bindings together for future releases.
 - GitHub main remained at `067b8a4` at launch. The deployment was built directly from the working tree.
+
+The recruiter-facing production address is now `https://trycoshop.vercel.app/`. The original Vercel hostname remains active for existing invites. The production Worker allows these two exact production origins. Preview still has its own Worker and storage.

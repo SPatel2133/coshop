@@ -1,23 +1,28 @@
 # CoShop
 
-**Shop together while everyone browses independently.** CoShop is a realtime shopping room for friends on a call. Share an exact product variant, discuss it together, and add it to a shared bag when you decide to buy it.
+CoShop lets friends shop the same catalog while staying on their own product pages. When you share a find, everyone sees the exact size or color you picked in **Our finds**. The **Shared bag** holds the items the group decides to buy.
 
-**[Open the live demo](https://coshop-portfolio-preview.vercel.app/)** · No account, installation, or host laptop required.
+**[Try CoShop live](https://trycoshop.vercel.app/)** · Sample catalog · No sign-in or installation
 
-1. Start a **Sample catalog** room. Open its invite in a private window or on a second device.
-2. In the first session, open **Over-Ear Headphones**, choose **Black**, and click **Share find**.
-3. In the other session, open **Around the room → Our finds**. Look for **Black · CAD 149.00**. Both bags are still empty.
-4. Click **Add to bag** in the first session. Both bag counts become **1**. Refresh the second session to see the find and bag persist.
+## Try it in two windows
+
+| Do this | Look for this |
+| --- | --- |
+| Start a **Sample catalog** room. Copy its invite and open it in a private window or on a second device. | Both shoppers appear in the room and can browse independently. |
+| In the first window, select **Black** on **Over-Ear Headphones** and click **Share find**. | In the other window, open **Around the room → Our finds**. Black appears with its own photo and **CAD 149.00**. Both bags stay at zero. |
+| Click **Add to bag** in the first window. | Both bag counts become **1**. Refresh the second window to see the find and bag persist. |
 
 ![CoShop product gallery and the shared Black headphone find with an empty bag](docs/images/coshop-demo.jpg)
 
-## How it works
+## How the room stays in sync
 
 - **React and Vercel** serve the storefront, catalog, Quick add, and product galleries. Each shopper controls their own view.
 - **Cloudflare Workers** handle room HTTP requests and direct WebSockets. The invite points to the frontend. Member sessions authenticate in the first WebSocket frame.
 - **SQLite-backed Durable Objects** coordinate room state, ordered events, chat and per-variant comments, and reconnect snapshots. Sharing records a find for the exact variant. Adding changes a distinct bag projection. Ordered server acknowledgements and request IDs keep explicit mutations consistent across clients and retries.
 
-The public demo uses a **sample catalog** and a **simulated Haul** with no payment. The optional Shopify integration loads live products through the Storefront API, validates prices and availability, and hands off to hosted checkout. Checkout requires a configured store. A paid recap requires a verified Shopify order webhook. Live checkout was not verified on the public release.
+## What the demo includes
+
+The public demo uses a **sample catalog** with reference prices. **Demo completion · simulated** in the bag shows the Haul recap without placing an order or taking payment. The optional Shopify integration loads live products through the Storefront API, validates prices and availability, and hands off to hosted checkout. Checkout requires a configured store. A paid recap requires a verified Shopify order webhook. Live checkout was not verified on the public release.
 
 ## Run locally
 
