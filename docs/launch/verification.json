@@ -1,0 +1,75 @@
+{
+  "record": "Final independent review summary for integration PR #3. Counts as reported by the independent verifier; CI results from GitHub Actions. Contains no invites, tokens, URLs with cart keys, or secrets.",
+  "sources": {
+    "integration": "8690efcf4b50be29c123bdf9ddef8c5d42dea7bb",
+    "checkout": "ae2d286f4a6e97ce32c1500662a1693d6c7f0ef6",
+    "ci": "b6fb28e9a4b086f677fca3df56f07d28d093d763",
+    "baseline": "2b53c5229e8cc77111c41b9dd36a280a45772495"
+  },
+  "environment": {
+    "os": "Linux x64",
+    "node": "v24.22.3",
+    "pnpm": "11.25.0"
+  },
+  "commands": [
+    "pnpm install --frozen-lockfile",
+    "pnpm build",
+    "pnpm test",
+    "pnpm exec playwright install chromium",
+    "pnpm exec playwright test tests/design.spec.js --workers=1",
+    "node scripts/evidence.mjs reproduce",
+    "node scripts/evidence.mjs measure",
+    "node scripts/evidence.mjs diagnose"
+  ],
+  "ci": {
+    "run": "https://github.com/SPatel2133/coshop/actions/runs/44495198821",
+    "headSha": "8690efcf4b50be29c123bdf9ddef8c5d42dea7bb",
+    "test": "87/87",
+    "browser": "19/19",
+    "evidence": "3/3 passed",
+    "artifact": {
+      "id": 14514866670,
+      "name": "coshop-browser-summary",
+      "sha256": "4ff0ad1bbf970763925c07c94caf09ffd6b040402399a24c3d6f38c437767b59",
+      "expires": "2026-12-03T09:19:33Z",
+      "secretScanMatches": 0
+    }
+  },
+  "independentReview": {
+    "reviewer": "https://app.devin.ai/sessions/1045c6a3a800452da98cf56473556601",
+    "verdict": "pass",
+    "build": "pass",
+    "tests": 87,
+    "browser": 19,
+    "evidence": 3,
+    "transportProbes": 7,
+    "ambiguityProbes": 6,
+    "contractProbes": 6,
+    "deliveryProbes": {
+      "G1": "passed (Node and Worker)",
+      "G2": "passed",
+      "G3": "limitation"
+    },
+    "manualVerifierChecks": 4,
+    "originalDomainAssertions": {
+      "passedUnchanged": 12,
+      "adaptedToOutcomeContract": 6
+    },
+    "verifierScript": {
+      "invalidInvocationsExit1": 10,
+      "wrongDataDir": "server_rows_missing, exit 1, database unchanged",
+      "paidTimeout": "exit 1",
+      "reportIdentifiers": "labels only",
+      "duplicateDeliveryVerified": false,
+      "rejectedSignedWebhookLogs": "no secrets"
+    }
+  },
+  "recording": "https://app.devin.ai/sessions/1045c6a3a800452da98cf56473556601?testRecording=3b1a89fe-eedd-4d72-a0e3-2892859281c4",
+  "openGates": [
+    "Supervised live Shopify order and webhook test (development-store secrets and explicit order approval)",
+    "Reconnect slower than 15 seconds untested",
+    "G3: unsent add lost on refresh; proposed feedback pending user approval",
+    "Visual UX changes pending user approval",
+    "Merge and deployment pending user approval"
+  ]
+}
