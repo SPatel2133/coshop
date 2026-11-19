@@ -515,12 +515,31 @@ test("Node: verify-shopify drives the current room routes, and a signed paid web
     SHOPIFY_BUYER_COUNTRY: "CA",
     DATA_DIR: await mkdtemp(join(tmpdir(), "coshop-verify-")),
   };
-  t.after(() => rm(env.DATA_DIR, { recursive: true, force: true }));
-  const { base } = await launch(t, false, env, [
+  // Hooks run in registration order: launch's server kill, the CLI kill below,
+  // then the delete, so no process still holds rooms.sqlite (Windows locks it).
+  const { base, child: server } = await launch(t, false, env, [
     "--import",
     // A file: URL, not a path: Windows rejects bare "C:\\" paths for --import.
     new URL("./support/fake-shopify.mjs", import.meta.url).href,
   ]);
+  const exited = (child) =>
+    child.exitCode !== null || child.signalCode !== null
+      ? Promise.resolve()
+      : new Promise((resolve) => {
+          const timer = setTimeout(resolve, 10000);
+          child.once("exit", () => resolve(clearTimeout(timer)));
+        });
+  const clis = new Set();
+  t.after(async () => {
+    for (const child of clis) child.kill();
+    await Promise.all([...clis, server].map(exited));
+    await rm(env.DATA_DIR, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 200,
+    });
+  });
   const script = fileURLToPath(
     new URL("../scripts/verify-shopify.mjs", import.meta.url),
   );
@@ -530,6 +549,7 @@ test("Node: verify-shopify drives the current room routes, and a signed paid web
         env: { ...process.env, VERIFY_POLL_MS: "100" },
         stdio: ["ignore", "pipe", "pipe"],
       });
+      clis.add(child);
       let stdout = "",
         stderr = "";
       child.stdout.on("data", (b) => (stdout += b));
@@ -537,7 +557,10 @@ test("Node: verify-shopify drives the current room routes, and a signed paid web
         stderr += b;
         operator?.(stderr);
       });
-      child.on("exit", (code) => resolve({ code, stdout, stderr }));
+      child.on("exit", (code) => {
+        clis.delete(child);
+        resolve({ code, stdout, stderr });
+      });
     });
   const refused = await run([]);
   assert.notEqual(refused.code, 0);
@@ -555,7 +578,7 @@ test("Node: verify-shopify drives the current room routes, and a signed paid web
     assert.equal(rejected.stdout, "", bad);
   }
   const empty = await mkdtemp(join(tmpdir(), "coshop-wrong-db-"));
-  t.after(() => rm(empty, { recursive: true, force: true }));
+  t.after(() => rm(empty, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }));
   await writeFile(join(empty, "rooms.sqlite"), "");
   for (const [dir, reason] of [
     [join(empty, "missing"), "server_db_unreadable"],
