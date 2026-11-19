@@ -12,7 +12,7 @@ import { migrate, nodeStore } from "../server/storage.js";
 import { configuration } from "../server/config.js";
 import { catalog } from "../catalog.mjs";
 import { digest } from "../server/security.js";
-import { readPaidWebhook } from "../server/order-webhook.js";
+import { readPaidWebhook, logWebhook } from "../server/order-webhook.js";
 import { launch, api } from "./support/rooms.mjs";
 
 const variantId = "gid://shopify/ProductVariant/42";
@@ -100,25 +100,24 @@ function fixture(hooks) {
   return { state, client };
 }
 
-async function setup(t) {
+const schema = (name, index) =>
+  readFile(
+    new URL(`../drizzle/room-object/000${index + 1}_${name}.sql`, import.meta.url),
+    "utf8",
+  );
+async function setup(t, through = names.length) {
   let now = 100000;
   const clock = () => now;
   const db = new DatabaseSync(":memory:");
   db.exec("PRAGMA foreign_keys=ON");
   t.after(() => db.close());
   const store = nodeStore(db);
-  for (const [index, name] of names.entries())
-    migrate(
-      store,
-      await readFile(
-        new URL(
-          `../drizzle/room-object/000${index + 1}_${name}.sql`,
-          import.meta.url,
-        ),
-        "utf8",
-      ),
-      index + 1,
-    );
+  for (const [index, name] of names.slice(0, through).entries())
+    migrate(store, await schema(name, index), index + 1);
+  const upgrade = async () => {
+    for (const [index, name] of names.entries())
+      if (index >= through) migrate(store, await schema(name, index), index + 1);
+  };
   const hooks = {};
   const { client, state } = fixture(hooks);
   const provider = new Storefront({}, clock, client);
@@ -213,6 +212,7 @@ async function setup(t) {
     attempts,
     deliver,
     start,
+    upgrade,
     tick: (duration) => (now += duration),
   };
 }
@@ -480,7 +480,10 @@ for (const worker of [false, true])
       const attempt = crypto.randomUUID();
       const outcome = async (payload, signature) => {
         const response = await signed(base, payload, signature);
-        return [response.status, (await response.json()).outcome];
+        const body = await response.json();
+        if (response.ok)
+          assert.deepEqual(Object.keys(body).sort(), ["outcome", "received"]);
+        return [response.status, body.outcome];
       };
       assert.deepEqual(
         await outcome(order(room, attempt, "x"), "A".repeat(43) + "="),
@@ -620,6 +623,10 @@ test("retrying the same attempt after a lost response resumes its cart without a
   const resumed = await start(proposal);
   assert.equal(resumed.checkoutUrl, opened.checkoutUrl);
   assert.equal(resumed.checkout.id, proposal.id);
+  const denied = await start(input(), sam).catch((error) => error);
+  assert.equal(denied.code, "CHECKOUT_BUSY");
+  assert.equal(JSON.stringify(denied).includes("checkout.example"), false);
+  assert.equal(denied.message.includes("checkout.example"), false);
   const otherTab = await start(input());
   assert.equal(otherTab.checkoutUrl, opened.checkoutUrl);
   assert.equal(otherTab.checkout.id, proposal.id);
@@ -675,8 +682,81 @@ test("bag model retries a lost checkout response with the same attempt id", asyn
     assert.equal(new Set(requests.map((r) => r.id)).size, 1);
     assert.equal(store.get("coshop:checkout:room:maya"), requests[0].id);
     assert.equal(assigned, "https://example.myshopify.com/cart/c/x");
+    const resumedId = crypto.randomUUID();
+    requests.length = 2;
+    model.checkoutRequest = async (action, body) => {
+      requests.push(body);
+      return {
+        checkoutUrl: "https://example.myshopify.com/cart/c/x",
+        checkout: { id: resumedId },
+      };
+    };
+    model.departing = false;
+    await model.startCheckout();
+    assert.notEqual(requests.at(-1).id, resumedId);
+    assert.equal(store.get("coshop:checkout:room:maya"), resumedId);
   } finally {
     delete globalThis.sessionStorage;
     delete globalThis.location;
   }
+});
+
+test("upgrading a populated v7 room keeps attribution, legacy dedup and legacy leases", async (t) => {
+  const { rooms, room, maya, sam, store, upgrade, deliver, attempts, start, input, command } =
+    await setup(t, 7);
+  command("bag_change", { action: "add", variantId });
+  const legacy = crypto.randomUUID();
+  const unbound = crypto.randomUUID();
+  const items = rooms.snapshot(room).bag.items;
+  rooms.haul.saveCheckout(room, legacy, domain, items);
+  rooms.haul.bindCart(room, legacy, await digest("cart-legacy"));
+  rooms.haul.saveCheckout(room, unbound, domain, items);
+  store.run(
+    "INSERT INTO haul_recaps(room_id,event_key,payload) VALUES(?,?,?)",
+    room,
+    "paid:" + domain + ":gid://shopify/Order/5",
+    JSON.stringify({ id: "paid:old", mode: "paid", items: [] }),
+  );
+  store.run(
+    "INSERT INTO checkout_leases(room_id,id,user_id,expires_at) VALUES(?,?,?,?)",
+    room,
+    legacy,
+    maya.id,
+    rooms.clock() + 60000,
+  );
+  await upgrade();
+  assert.deepEqual(attempts(), [
+    { id: legacy, bound: true, outcome: "opened" },
+    { id: unbound, bound: false, outcome: "pending" },
+  ]);
+  await assert.rejects(start(input()), { code: "CHECKOUT_PENDING" });
+  await assert.rejects(start(input(), sam), { code: "CHECKOUT_BUSY" });
+  assert.equal(await deliver(legacy, "cart-legacy", { order: 5 }), "duplicate");
+  assert.equal(await deliver(unbound, "cart-x", { order: 6 }), "attempt_unbound");
+  assert.equal(await deliver(legacy, "cart-legacy", { order: 7 }), "recorded");
+  assert.equal(await deliver(legacy, "cart-legacy", { order: 7 }), "duplicate");
+  assert.equal(rooms.checkout.active(room), null);
+  assert.equal(rooms.snapshot(room).recap.id, "paid:" + legacy);
+});
+
+test("webhook diagnostics log only the outcome and a well-formed webhook id", (t) => {
+  const log = t.mock.method(console, "log", () => {});
+  const request = (id) =>
+    new Request("http://localhost/api/shopify/orders-paid", {
+      method: "POST",
+      headers: id ? { "x-shopify-webhook-id": id } : {},
+    });
+  logWebhook(request("b1d2-77"), "attempt_unbound");
+  logWebhook(request("x".repeat(65)), "recorded");
+  logWebhook(request("a b@example.com"), "duplicate");
+  logWebhook(request(), "unattributed");
+  assert.deepEqual(
+    log.mock.calls.map((call) => JSON.parse(call.arguments[0])),
+    [
+      { event: "coshop.orders_paid", outcome: "attempt_unbound", webhookId: "b1d2-77" },
+      { event: "coshop.orders_paid", outcome: "recorded", webhookId: null },
+      { event: "coshop.orders_paid", outcome: "duplicate", webhookId: null },
+      { event: "coshop.orders_paid", outcome: "unattributed", webhookId: null },
+    ],
+  );
 });

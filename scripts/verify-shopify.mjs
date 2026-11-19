@@ -1,5 +1,5 @@
 // Supervised Shopify checkout verifier for the current room API.
-// See docs/shopify-live-test-runbook.md. It never places an order itself.
+// See docs/shopify-live-verification.md. It never places an order itself.
 import { writeFile } from "node:fs/promises";
 import WebSocket from "ws";
 
