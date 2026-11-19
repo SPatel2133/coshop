@@ -98,8 +98,13 @@ hold, every live order will report `attempt_unbound` or `cart_mismatch` and no r
 
 ## Supervised procedure (only after authorization)
 
-Run it with the Node server so that `--data-dir` can read the room database **read-only**.
-Deploying to Cloudflare needs separate authorization.
+`--data-dir` works only with the Node server: it reads `<dir>/rooms.sqlite` **read-only** and
+fails (`server_db_unreadable` / `server_rows_missing`) unless the file holds exactly this run's
+attempts. Deploying to Cloudflare needs separate authorization.
+
+The verifier's stderr shows checkout URLs, which carry cart keys, to the supervised operator.
+Never redirect, capture or commit stderr. `--out` and stdout hold only the sanitized report:
+attempt labels `A1`/`A2`, no raw ids.
 
 1. Start the server with the secrets set and an empty data directory, keeping stdout:
    `DATA_DIR=<dir> pnpm start 2>&1 | tee server.log`. Expose it through a tunnel the owner
@@ -124,14 +129,15 @@ Deploying to Cloudflare needs separate authorization.
 | `evidence.json` `bagSha256` vs `server.attempts[*].snapshotSha256` | equal for `A1` and `A2` | The immutable snapshot equals the bag that was checked out (variant ids and quantities only; no names, pickers or room secrets) |
 | `server.attempts[*]` | `A1` and `A2` both `outcome: "paid"`, `cartBound: true` | Each order matched its own attempt |
 | `paymentOrder` / `server.recapOrder` | `["A2","A1"]` / `["A2","A1"]` | Both events are kept in receipt order; the newest receipt (`A1`) is shown |
-| `paidRecap.id` | `paid:<A1 id>` | — |
-| `redelivery.recapCountBefore` / `After` | `2` / `2` | Exactly one recap per order; the redelivery is a `duplicate` |
+| `paidRecap.attempt` | `A1` | The room shows the recap received last |
+| `passed` / `failures` | `true` / `[]` | The script exits 1 and lists reasons (`paid_recap_missing`, `recap_order`, `snapshot_mismatch_A1`, …) when a requested check fails or times out |
+| `redelivery.recapCountBefore` / `After` | `2` / `2`, `duplicateDeliveryVerified: false` | The redelivery created no recap. The script cannot prove a signed duplicate arrived: the operator must confirm the `duplicate` line in `webhook-log.jsonl` |
 | Log outcomes in receipt order | `recorded`, `recorded`, `duplicate` | `recorded` proves the HMAC, topic and shop matched; the `_coshop_haul` note attribute named this room and attempt; and `sha256(order.cart_token)` equalled the stored cart hash. `unattributed` means the marker or `cart_token` was missing; `cart_mismatch` means the hashes differed |
 | A rejected delivery (if any) | `rejected_signature`, `rejected_topic`, `rejected_shop`, `rejected_body` or `rejected_size` | Why the request got a 401 or 413 |
 
-Do not capture order numbers, customer data, raw `note_attributes`, cart tokens, checkout
-URLs, invites, session tokens or payloads. The attempt ids in `evidence.json` are random
-UUIDs that are only meaningful inside the expired test room.
+Do not capture or commit order numbers, customer data, raw orders, `note_attributes`, cart
+tokens, checkout URLs, invites, session tokens or payloads. The reports name attempts only as
+`A1`/`A2`.
 
 ## Cleanup
 
