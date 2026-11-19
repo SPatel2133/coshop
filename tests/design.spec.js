@@ -1001,11 +1001,12 @@ test("rejected changes and the 99 cap explain themselves; a later success clears
   await shot(page, "cap-note-360");
 });
 
-test("reconnect highlights changed bag lines once and reduced motion keeps a static outline", async ({ page, browser }) => {
-  const context = await browser.newContext(
-    process.env.COSHOP_UX_VIDEO ? { recordVideo: { dir: process.env.COSHOP_UX_VIDEO } } : {},
-  );
-  const maya = await context.newPage();
+test("reconnect highlights changed bag lines once and reduced motion keeps a static outline", async ({ browser }) => {
+  const options = process.env.COSHOP_UX_VIDEO
+    ? { recordVideo: { dir: process.env.COSHOP_UX_VIDEO, size: { width: 1440, height: 900 } } }
+    : {};
+  const contexts = await Promise.all([browser.newContext(options), browser.newContext()]);
+  const [page, maya] = await Promise.all(contexts.map((context) => context.newPage()));
   try {
     for (const shopper of [page, maya]) await shopper.setViewportSize({ width: 1440, height: 900 });
     await room(page);
@@ -1033,6 +1034,7 @@ test("reconnect highlights changed bag lines once and reduced motion keeps a sta
     await expect(changed).toHaveCount(1);
     await expect(changed).toContainText("Updated");
     await expect(status).toHaveText("Bag refreshed · 1 line changed.");
+    await expect(page.locator("#bag-drawer")).toHaveCSS("opacity", "1");
     await shot(page, "line-changed-1440");
     await expect(changed).toHaveCount(0, { timeout: 6000 });
     await expect(status).toHaveText("");
@@ -1057,7 +1059,7 @@ test("reconnect highlights changed bag lines once and reduced motion keeps a sta
     await expect(changed).toHaveCSS("outline-style", "solid");
     await expect(changed).toContainText("Updated");
   } finally {
-    await context.close();
+    await Promise.all(contexts.map((context) => context.close()));
   }
 });
 
@@ -1081,4 +1083,28 @@ test("selected gallery photo survives refresh per variant and ignores invalid sa
   await page.getByRole("combobox", { name: "Choose a variant" }).selectOption({ label: "Stone" });
   await expect(thumbs.nth(0)).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator(".detail-media")).not.toContainText("Image unavailable");
+});
+
+test("an own add confirmation does not linger after a peer changes the bag live", async ({ page, browser }) => {
+  const context = await browser.newContext();
+  const maya = await context.newPage();
+  try {
+    for (const shopper of [page, maya]) await shopper.setViewportSize({ width: 1440, height: 900 });
+    await room(page);
+    await joinRoom(page, maya, "Maya");
+    await openHeadphones(page);
+    await openHeadphones(maya);
+    await page.getByRole("button", { name: "Add to bag" }).click();
+    await expect(page.getByRole("button", { name: "Add to bag" })).toBeVisible();
+    await page.locator("#open-bag").click();
+    const status = page.locator("#bag-status");
+    await expect(status).toHaveText(/^Added Over-Ear Headphones/);
+    await maya.getByRole("button", { name: "Add to bag" }).click();
+    await expect(page.locator("#bag-items")).toContainText("2");
+    await bagCount(page, 2);
+    await expect(status).toHaveText("");
+    await expect(page.locator("#bag-items .line-changed")).toHaveCount(0);
+  } finally {
+    await context.close();
+  }
 });

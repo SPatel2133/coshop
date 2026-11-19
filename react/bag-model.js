@@ -11,6 +11,7 @@ class BagModel {
   constructor(command, checkoutRequest, publish, error) {
     Object.assign(this, { command, checkoutRequest, publish, error });
     this.pending = new Map();
+    this.own = new Set();
   }
 
   dispose() {
@@ -65,6 +66,13 @@ class BagModel {
         this.cue = { id: change.requestId, variantId: change.variantId };
       if (previous && (resync || (change && !change.action)))
         this.highlight(previous, bag, resync);
+      else if (
+        change?.action &&
+        !this.own.has(change.requestId) &&
+        !this.pending.size &&
+        this.feedback !== INTERRUPTED
+      )
+        this.feedback = "";
     }
     this.render();
   }
@@ -82,6 +90,7 @@ class BagModel {
           !old ||
           old.quantity !== item.quantity ||
           old.cents !== item.cents ||
+          old.currency !== item.currency ||
           old.available !== item.available
         );
       })
@@ -272,6 +281,8 @@ class BagModel {
     const pending = { id: navigationId(), action, item };
     const identity = this.identity;
     this.pending.set(variantId, pending);
+    this.own.add(pending.id);
+    if (this.own.size > 64) this.own.delete(this.own.values().next().value);
     this.remember(identity, variantId, pending.id);
     this.checkoutFeedback = "";
     this.feedback = "Saving your bag…";
