@@ -7,7 +7,7 @@
 
 ## Design and failure limits
 
-Path: shared bag → `CheckoutLeases.start` (30 s lease, bag locked) → immutable
+Path: shared bag → `Checkout.start` (30 s lease, bag locked) → immutable
 attempt snapshot in `haul_checkouts` (outcome `pending`) → Storefront `cartCreate`
 with attribute `_coshop_haul = <room>.<attempt>` → validate lines, subtotal, host
 → bind `sha256(cart token)` → outcome `opened`, lease extended to 5 min and the
@@ -66,25 +66,29 @@ writes the same lines to stdout.
 
 | Name | Purpose |
 | --- | --- |
-| `SHOPIFY_STORE_DOMAIN` | Dev store `*.myshopify.com` domain |
-| `SHOPIFY_STOREFRONT_TOKEN` | Storefront API token with product-listing read and checkout write access; take the exact scope names from the access-scopes page for the configured version (below) at run time |
-| `SHOPIFY_API_VERSION` | `.env.example` uses `2026-10`; must match the webhook subscription API version |
+| `SHOPIFY_STORE_DOMAIN` | Development store `*.myshopify.com` domain |
+| `SHOPIFY_STOREFRONT_TOKEN` | Storefront API token with exactly `unauthenticated_read_product_listings` (Product, Collection: the catalog) and `unauthenticated_write_checkouts` (Cart: `cartCreate`). CoShop reads only `availableForSale`, so no inventory scope is needed |
+| `SHOPIFY_API_VERSION` | `.env.example` uses `2026-10`. On 2026-11-19 shopify.dev lists `2026-10` as the release candidate and `2026-07` as latest stable. Use the version the owner chooses and use the same version for the webhook subscription |
 | `SHOPIFY_BUYER_COUNTRY` | Buyer country for pricing context |
-| `SHOPIFY_WEBHOOK_SECRET` | Secret Shopify signs `orders/paid` with (app client secret, or the admin notifications secret) |
-| `INVITE_SIGNING_SECRET` | Room invite signing |
+| `SHOPIFY_WEBHOOK_SECRET` | Secret that Shopify signs `orders/paid` with (the app client secret, or the admin notifications secret) |
+| `INVITE_SIGNING_SECRET` | Room invite signing; a fresh value used only for this test |
 
-Webhook: topic `orders/paid`, JSON, endpoint `https://<supervised host>/api/shopify/orders-paid`
-(the subscriber needs order read access). Use a development store with a test payment gateway,
-so **no real charge occurs**. A live run needs explicit approval from the user every time.
+Webhook: topic `orders/paid` (`ORDERS_PAID`), JSON, endpoint
+`https://<supervised host>/api/shopify/orders-paid`. The topic requires `read_orders` (or
+`read_marketplace_orders`, which CoShop does not use) on the app that owns the subscription.
+Use a development store with Shopify's test payment gateway: **no real charge occurs**.
+Each live run needs explicit approval from the user.
 
-Sources (open the pages for the configured `SHOPIFY_API_VERSION` and replace the version in
-the URL if it differs):
+Sources, checked on 2026-11-19 at `2026-10` (if a different version is configured, re-check
+the same pages at that version):
 
 - Development stores and test payments: https://shopify.dev/docs/apps/build/stores/development-stores
 - Cart attributes carry over to the resulting order: https://shopify.dev/docs/api/storefront/2026-10/objects/Attribute
   (reviewed at `2026-01`)
-- Storefront access scopes: https://shopify.dev/docs/api/usage/access-scopes
-- Webhook topics (`orders/paid`): https://shopify.dev/docs/api/admin-graphql/2026-10/enums/WebhookSubscriptionTopic
+- Storefront access scopes (`unauthenticated_*` table): https://shopify.dev/docs/api/usage/access-scopes
+- `cartCreate`: https://shopify.dev/docs/api/storefront/2026-10/mutations/cartCreate
+- `ORDERS_PAID` and its required scopes: https://shopify.dev/docs/api/admin-graphql/2026-10/enums/WebhookSubscriptionTopic
+- `orders/paid` payload (`note_attributes`, `cart_token`): https://shopify.dev/docs/api/webhooks/2026-10
 
 **Unproven until a real supervised test:** that the paid order payload carries
 `_coshop_haul` in `note_attributes` and a `cart_token` whose SHA-256 equals the digest of
@@ -92,25 +96,46 @@ the cart id token that CoShop bound at `cartCreate`. The fixtures assume this; i
 hold, every live order will report `attempt_unbound` or `cart_mismatch` and no recap is written
 (fail closed).
 
-## Supervised procedure (after authorization)
+## Supervised procedure (only after authorization)
 
-1. Start the server against the dev store with the secrets set (Node:
-   `pnpm start`, exposed through an owner-approved tunnel). Deploying to Cloudflare
-   needs separate authorization.
-2. Dry check without an order: `node scripts/verify-shopify.mjs <base> --allow-cart-create --out=evidence.json`
-   creates one Storefront cart, prints the checkout URL only to the terminal and
-   releases the lock.
-3. Paid check: `node scripts/verify-shopify.mjs <base> --allow-cart-create --await-paid=900 --out=evidence.json`;
-   the authorized human opens the printed URL and completes a test-mode order.
-4. Expected sanitized evidence: `evidence.json` with `catalogMode: "shopify"`,
-   `checkoutHost`, `attempt`, `bagTotals`, and `paidRecap { id: "paid:<attempt>",
-   mode: "paid", totalQuantity, totals, itemVariantIds }`; one log line with
-   `outcome: "recorded"`; a redelivery from Shopify admin logs `duplicate`. Do
-   not capture order numbers, customer data, checkout URLs or tokens.
+Run it with the Node server so that `--data-dir` can read the room database **read-only**.
+Deploying to Cloudflare needs separate authorization.
+
+1. Start the server with the secrets set and `DATA_DIR=<empty test dir>` (`pnpm start`),
+   exposed through a tunnel the owner approves. Register the `orders/paid` webhook to it.
+2. Dry check, no order:
+   `node scripts/verify-shopify.mjs <base> --allow-cart-create --data-dir=<dir> --out=dry.json`.
+   Expected: one attempt `A1`, server `outcome: "opened"`, `cartBound: true`,
+   `snapshotSha256 == bagSha256`, `recapCount: 0`, lock released.
+3. Paid run (two attempts, paid in reverse order, plus one redelivery):
+   `node scripts/verify-shopify.mjs <base> --allow-cart-create --attempts=2 --await-paid=1200 --await-redelivery=300 --data-dir=<dir> --out=evidence.json`.
+   The script prints two checkout URLs to the terminal only. The approved human pays `A2`
+   first and then `A1` with the test gateway. When asked, they redeliver `A1`'s `orders/paid`
+   delivery once from Shopify's webhook delivery tooling. Whether a real delivery can be
+   resent depends on how the subscription was created, so check this at run time. If it
+   cannot, record "redelivery not available": duplicates are then covered only by fixtures.
+4. Capture the matching log lines from the server's stdout. Each line is
+   `{event, outcome, webhookId}`, and nothing else is logged.
+
+| Evidence | Expected | Meaning |
+| --- | --- | --- |
+| `evidence.json` `bagSha256` vs `server.attempts[*].snapshotSha256` | equal for `A1` and `A2` | The immutable snapshot equals the bag that was checked out (variant ids and quantities only; no names, pickers or room secrets) |
+| `server.attempts[*]` | `A1` and `A2` both `outcome: "paid"`, `cartBound: true` | Each order matched its own attempt |
+| `paymentOrder` / `server.recapOrder` | `["A2","A1"]` / `["A2","A1"]` | Both events are kept in receipt order; the newest receipt (`A1`) is shown |
+| `paidRecap.id` | `paid:<A1 id>` | — |
+| `redelivery.recapCountBefore` / `After` | `2` / `2` | Exactly one recap per order; the redelivery is a `duplicate` |
+| Log outcomes in receipt order | `recorded`, `recorded`, `duplicate` | `recorded` proves the HMAC, topic and shop matched; the `_coshop_haul` note attribute named this room and attempt; and `sha256(order.cart_token)` equalled the stored cart hash. `unattributed` means the marker or `cart_token` was missing; `cart_mismatch` means the hashes differed |
+| A rejected delivery (if any) | `rejected_signature`, `rejected_topic`, `rejected_shop`, `rejected_body` or `rejected_size` | Why the request got a 401 or 413 |
+
+Do not capture order numbers, customer data, raw `note_attributes`, cart tokens, checkout
+URLs, invites, session tokens or payloads. The attempt ids in `evidence.json` are random
+UUIDs that are only meaningful inside the expired test room.
 
 ## Cleanup
 
-Cancel or refund and archive the test order in the dev store, delete the webhook
-subscription, revoke the Storefront token and rotate the webhook secret, delete
-the local `evidence.json` and any tunnel, and let the test room expire (24 h TTL by
-default), which deletes all of its rows.
+The test gateway makes no charges, so no refund is needed. Remove only what this test
+created: archive the test orders, delete the `orders/paid` subscription, revoke the
+Storefront token if it was created for this test, stop the tunnel and the server, and delete
+the test `DATA_DIR`, `dry.json` and `evidence.json`. Do not rotate or delete shared secrets or
+store resources that existed before the test. Any room data that is left is deleted when
+the room expires (24 h `ROOM_TTL_MS` by default).

@@ -1,7 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createHmac } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
@@ -511,7 +513,9 @@ test("Node: verify-shopify drives the current room routes, and a signed paid web
     SHOPIFY_STOREFRONT_TOKEN: "public-token-for-fake-store",
     SHOPIFY_API_VERSION: "2026-10",
     SHOPIFY_BUYER_COUNTRY: "CA",
+    DATA_DIR: await mkdtemp(join(tmpdir(), "coshop-verify-")),
   };
+  t.after(() => rm(env.DATA_DIR, { recursive: true, force: true }));
   const { base } = await launch(t, false, env, [
     "--import",
     fileURLToPath(new URL("./support/fake-shopify.mjs", import.meta.url)),
@@ -575,6 +579,57 @@ test("Node: verify-shopify drives the current room routes, and a signed paid web
     itemVariantIds: ["gid://shopify/ProductVariant/42"],
   });
   assert.ok(!supervised.stdout.includes("/cart/c/"));
+
+  // Two attempts paid in reverse order, then one redelivery of the newest.
+  const outcomes = [];
+  let started, redelivered;
+  const deliver = async ([n, room, attempt]) =>
+    outcomes.push(
+      (
+        await (
+          await signed(
+            base,
+            order(room, attempt, "fake-" + attempt, {
+              admin_graphql_api_id: "gid://shopify/Order/10" + n,
+            }),
+          )
+        ).json()
+      ).outcome,
+    );
+  const urls = /^A(\d) \S+\/cart\/c\/([a-f0-9-]{36})\.([a-f0-9-]{36})$/gm;
+  const twice = await run(
+    [
+      "--allow-cart-create",
+      "--attempts=2",
+      "--await-paid=30",
+      "--await-redelivery=2",
+      "--data-dir=" + env.DATA_DIR,
+    ],
+    (stderr) => {
+      const found = [...stderr.matchAll(urls)].map(([, n, room, id]) => [n, room, id]);
+      if (found.length === 2 && !started)
+        started = deliver(found[0]).then(() => deliver(found[1]));
+      if (/redeliver/.test(stderr) && !redelivered)
+        redelivered = started.then(() => deliver(found[1]));
+    },
+  );
+  assert.equal(twice.code, 0, twice.stderr);
+  await redelivered;
+  assert.deepEqual(outcomes, ["recorded", "recorded", "duplicate"]);
+  const proof = JSON.parse(twice.stdout);
+  assert.deepEqual(proof.paymentOrder, ["A2", "A1"]);
+  assert.deepEqual(proof.server.recapOrder, ["A2", "A1"]);
+  assert.deepEqual(proof.redelivery, { recapCountBefore: 2, recapCountAfter: 2 });
+  assert.equal(proof.paidRecap.id, "paid:" + proof.attempt);
+  for (const entry of proof.server.attempts)
+    assert.deepEqual(entry, {
+      attempt: entry.attempt,
+      outcome: "paid",
+      cartBound: true,
+      snapshotSha256: proof.bagSha256,
+    });
+  for (const leak of ["/cart/c/", "token", "invite", "Verifier", proof.attempts[0].id.split("-")[0] + "."])
+    assert.ok(!twice.stdout.includes(leak), leak);
 });
 
 test("a committed bag change replays its original ack after a checkout lease starts; new or altered changes stay locked", async (t) => {
@@ -739,7 +794,7 @@ test("upgrading a populated v7 room keeps attribution, legacy dedup and legacy l
   assert.equal(rooms.snapshot(room).recap.id, "paid:" + legacy);
 });
 
-test("webhook diagnostics log only the outcome and a well-formed webhook id", (t) => {
+test("webhook diagnostics log only the outcome and a well-formed webhook id", async (t) => {
   const log = t.mock.method(console, "log", () => {});
   const request = (id) =>
     new Request("http://localhost/api/shopify/orders-paid", {
@@ -750,8 +805,34 @@ test("webhook diagnostics log only the outcome and a well-formed webhook id", (t
   logWebhook(request("x".repeat(65)), "recorded");
   logWebhook(request("a b@example.com"), "duplicate");
   logWebhook(request(), "unattributed");
+  const forged = (headers) =>
+    readPaidWebhook(
+      new Request("http://localhost/api/shopify/orders-paid", {
+        method: "POST",
+        headers: {
+          "x-shopify-shop-domain": domain,
+          "x-shopify-topic": "orders/paid",
+          "x-shopify-hmac-sha256": "A".repeat(43) + "=",
+          "x-shopify-webhook-id": "w-1",
+          ...headers,
+        },
+        body: "{}",
+      }),
+      { shopify: { webhookSecret: "test-secret", domain } },
+    );
+  for (const headers of [
+    {},
+    { "x-shopify-topic": "orders/create" },
+    { "x-shopify-shop-domain": "other.myshopify.com" },
+    { "x-shopify-hmac-sha256": "short" },
+  ])
+    await assert.rejects(forged(headers), { code: "WEBHOOK_SIGNATURE" });
   assert.deepEqual(
-    log.mock.calls.map((call) => JSON.parse(call.arguments[0])),
+    log.mock.calls.slice(4).map((call) => JSON.parse(call.arguments[0]).outcome),
+    ["rejected_signature", "rejected_topic", "rejected_shop", "rejected_signature"],
+  );
+  assert.deepEqual(
+    log.mock.calls.slice(0, 4).map((call) => JSON.parse(call.arguments[0])),
     [
       { event: "coshop.orders_paid", outcome: "attempt_unbound", webhookId: "b1d2-77" },
       { event: "coshop.orders_paid", outcome: "recorded", webhookId: null },

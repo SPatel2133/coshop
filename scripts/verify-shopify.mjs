@@ -1,6 +1,8 @@
 // Supervised Shopify checkout verifier for the current room API.
 // See docs/shopify-live-verification.md. It never places an order itself.
 import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import WebSocket from "ws";
 
 const args = process.argv.slice(2);
@@ -14,6 +16,14 @@ if (!flag("allow-cart-create"))
   );
 if (!Number.isSafeInteger(awaitPaid) || awaitPaid < 0 || awaitPaid > 3600)
   throw new Error("--await-paid must be 0-3600 seconds.");
+const attempts = Number(flag("attempts")?.split("=")[1] ?? 1);
+const redelivery = Number(flag("await-redelivery")?.split("=")[1] ?? 0);
+const dataDir = flag("data-dir")?.split("=")[1];
+if (![1, 2].includes(attempts)) throw new Error("--attempts must be 1 or 2.");
+if (!Number.isSafeInteger(redelivery) || redelivery < 0 || redelivery > 3600)
+  throw new Error("--await-redelivery must be 0-3600 seconds.");
+if (redelivery && !(awaitPaid && dataDir))
+  throw new Error("--await-redelivery needs --await-paid and --data-dir.");
 
 async function call(path, data, token) {
   const response = await fetch(base + path, {
@@ -73,28 +83,97 @@ const { bag } = await command(host.invite, host.token, {
   action: "add",
   variantId: variant.id,
 });
-const attempt = crypto.randomUUID();
-const checkout = await call(
-  path + "/checkout",
-  { id: attempt, revision: bag.revision, pricedAt: bag.pricedAt },
-  host.token,
-);
-const checkoutUrl = new URL(checkout.checkoutUrl);
+// Only variant ids and quantities are hashed: no names, pickers or prices.
+const sha256 = async (value) =>
+  Buffer.from(
+    await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(value))),
+  ).toString("hex");
+const lines = (items) =>
+  items
+    .map(({ variantId, quantity }) => ({ variantId, quantity }))
+    .sort((a, b) => a.variantId.localeCompare(b.variantId));
+const bagSha256 = await sha256(lines(bag.items));
+const opened = [];
+for (let index = 0; index < attempts; index++) {
+  const id = crypto.randomUUID();
+  // Each checkout re-prices the bag, so later attempts use the current bag.
+  const current = index
+    ? (await call(path + "/session", {}, host.token)).room.bag
+    : bag;
+  const checkout = await call(
+    path + "/checkout",
+    { id, revision: current.revision, pricedAt: current.pricedAt },
+    host.token,
+  );
+  opened.push({ id, url: new URL(checkout.checkoutUrl) });
+  // Releasing ends the lease only; the opened attempt stays attributable.
+  if (index < attempts - 1 || !awaitPaid)
+    await call(path + "/checkout-release", { id }, host.token);
+}
+const attempt = opened[0].id;
+const checkoutUrl = opened[0].url;
+const label = (id) => "A" + (opened.findIndex((entry) => entry.id === id) + 1);
+// The room id is the unsigned half of the invite; it is used locally, never reported.
+function server() {
+  const db = new DatabaseSync(join(dataDir, "rooms.sqlite"), { readOnly: true });
+  try {
+    const room = host.invite.split(".")[0];
+    const rows = db
+      .prepare("SELECT id,outcome,cart_token,snapshot FROM haul_checkouts WHERE room_id=? ORDER BY rowid")
+      .all(room);
+    const recaps = db
+      .prepare("SELECT payload FROM haul_recaps WHERE room_id=? ORDER BY sequence")
+      .all(room)
+      .map((row) => JSON.parse(row.payload).id.replace(/^paid:/, ""));
+    return { rows, recaps };
+  } finally {
+    db.close();
+  }
+}
+async function serverEvidence() {
+  const { rows, recaps } = server();
+  return {
+    attempts: await Promise.all(
+      rows.map(async (row) => ({
+        attempt: label(row.id),
+        outcome: row.outcome,
+        cartBound: row.cart_token !== "",
+        snapshotSha256: await sha256(lines(JSON.parse(row.snapshot).items)),
+      })),
+    ),
+    recapCount: recaps.length,
+    recapOrder: recaps.map(label),
+  };
+}
 let recap = null;
+const seen = [];
 if (awaitPaid) {
-  // The checkout URL is printed only to the operator's terminal, never to the report.
+  // Checkout URLs are printed only to the operator's terminal, never to the report.
   console.error(
-    `Operator: complete ONE authorized test order within ${awaitPaid}s:\n${checkoutUrl.href}`,
+    `Operator: complete ${attempts} authorized test-gateway order(s) within ${awaitPaid}s, in this order:\n` +
+      [...opened].reverse().map((entry) => label(entry.id) + " " + entry.url.href).join("\n"),
   );
   const until = Date.now() + awaitPaid * 1000;
-  while (!recap && Date.now() < until) {
+  const done = () =>
+    dataDir ? server().recaps.length >= attempts : seen.includes(attempt);
+  while (!done() && Date.now() < until) {
     await new Promise((resolve) => setTimeout(resolve, 3000));
     const { room } = await call(path + "/session", {}, host.token);
-    if (room.recap?.id === "paid:" + attempt) recap = room.recap;
+    const id = room.recap?.id?.replace(/^paid:/, "");
+    if (id && !seen.includes(id)) seen.push(id);
   }
+  const { room } = await call(path + "/session", {}, host.token);
+  if (room.recap?.id === "paid:" + attempt) recap = room.recap;
   if (!recap) console.error("No attributed paid recap arrived before the timeout.");
-} else
-  await call(path + "/checkout-release", { id: attempt }, host.token);
+}
+const beforeRedelivery = dataDir && awaitPaid ? await serverEvidence() : null;
+if (redelivery) {
+  console.error(
+    `Operator: redeliver the ${label(attempt)} orders/paid webhook from Shopify now; waiting ${redelivery}s.`,
+  );
+  await new Promise((resolve) => setTimeout(resolve, redelivery * 1000));
+}
+const evidence = dataDir ? await serverEvidence() : null;
 
 const report = {
   verifiedAt: new Date().toISOString(),
@@ -104,8 +183,11 @@ const report = {
   variantId: variant.id,
   requestedQuantity: 1,
   bagTotals: bag.totals,
+  bagSha256,
   checkoutHost: checkoutUrl.hostname,
   attempt,
+  attempts: opened.map((entry) => ({ attempt: label(entry.id), id: entry.id })),
+  paymentOrder: [...opened].reverse().map((entry) => label(entry.id)),
   lockReleased: !awaitPaid,
   paidRecap: recap && {
     id: recap.id,
@@ -114,10 +196,16 @@ const report = {
     totals: recap.totals,
     itemVariantIds: recap.items.map((item) => item.variantId),
   },
+  server: evidence,
+  redelivery: redelivery
+    ? {
+        recapCountBefore: beforeRedelivery.recapCount,
+        recapCountAfter: evidence.recapCount,
+      }
+    : null,
   scope: awaitPaid
-    ? "Created one Storefront cart through the room API and waited for a human-placed, authorized test order's signed orders/paid webhook."
-    : "Created one Storefront cart through the room API. No order or payment was submitted.",
+    ? "Created Storefront carts through the room API and waited for human-placed, authorized test-gateway orders' signed orders/paid webhooks."
+    : "Created Storefront carts through the room API. No order or payment was submitted.",
 };
 if (out) await writeFile(out, JSON.stringify(report, null, 2) + "\n");
 console.log(JSON.stringify(report, null, 2));
-if (awaitPaid && !recap) process.exitCode = 2;
