@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHmac } from "node:crypto";
@@ -526,6 +526,7 @@ test("Node: verify-shopify drives the current room routes, and a signed paid web
   const run = (args, operator) =>
     new Promise((resolve) => {
       const child = spawn(process.execPath, [script, base, ...args], {
+        env: { ...process.env, VERIFY_POLL_MS: "100" },
         stdio: ["ignore", "pipe", "pipe"],
       });
       let stdout = "",
@@ -540,13 +541,44 @@ test("Node: verify-shopify drives the current room routes, and a signed paid web
   const refused = await run([]);
   assert.notEqual(refused.code, 0);
   assert.match(refused.stderr, /--allow-cart-create/);
-  const cartOnly = await run(["--allow-cart-create"]);
+  for (const bad of [
+    ["--allow-cart-createNO"],
+    ["--allow-cart-create=yes"],
+    ["--allow-cart-create", "--await-paid"],
+    ["--allow-cart-create", "--5"],
+    ["--allow-cart-create", "5"],
+    ["--allow-cart-create", "--attempt=2"],
+  ]) {
+    const rejected = await run(bad);
+    assert.notEqual(rejected.code, 0, bad);
+    assert.equal(rejected.stdout, "", bad);
+  }
+  const empty = await mkdtemp(join(tmpdir(), "coshop-wrong-db-"));
+  t.after(() => rm(empty, { recursive: true, force: true }));
+  await writeFile(join(empty, "rooms.sqlite"), "");
+  for (const [dir, reason] of [
+    [join(empty, "missing"), "server_db_unreadable"],
+    [empty, "server_db_unreadable"],
+  ]) {
+    const wrong = await run(["--allow-cart-create", "--data-dir=" + dir]);
+    assert.equal(wrong.code, 1, wrong.stderr);
+    assert.deepEqual(JSON.parse(wrong.stdout).failures, [reason]);
+  }
+  const unpaid = await run(["--allow-cart-create", "--await-paid=1", "--data-dir=" + env.DATA_DIR]);
+  assert.equal(unpaid.code, 1, unpaid.stderr);
+  const missed = JSON.parse(unpaid.stdout);
+  assert.equal(missed.passed, false);
+  assert.deepEqual(missed.failures, ["paid_recap_missing", "outcome_opened_A1", "recap_order"]);
+  const outFile = join(env.DATA_DIR, "dry=run.json");
+  const cartOnly = await run(["--allow-cart-create", "--data-dir=" + env.DATA_DIR, "--out=" + outFile]);
   assert.equal(cartOnly.code, 0, cartOnly.stderr);
+  assert.equal(await readFile(outFile, "utf8"), cartOnly.stdout);
   const report = JSON.parse(cartOnly.stdout);
   assert.equal(report.checkoutHost, "fake-store.myshopify.com");
   assert.equal(report.lockReleased, true);
   assert.equal(report.paidRecap, null);
   assert.deepEqual(report.bagTotals, [{ currency: "CAD", cents: 2500 }]);
+  assert.deepEqual([report.passed, report.failures], [true, []]);
   for (const leak of ["key=", "/cart/c/", "token", "invite"])
     assert.ok(!cartOnly.stdout.includes(leak), leak);
   // Supervised mode: this test plays the operator and "pays" by delivering
@@ -572,7 +604,7 @@ test("Node: verify-shopify drives the current room routes, and a signed paid web
   const evidence = JSON.parse(supervised.stdout);
   assert.equal(evidence.lockReleased, false);
   assert.deepEqual(evidence.paidRecap, {
-    id: "paid:" + evidence.attempt,
+    attempt: "A1",
     mode: "paid",
     totalQuantity: 1,
     totals: [{ cents: 2500, currency: "CAD" }],
@@ -619,8 +651,11 @@ test("Node: verify-shopify drives the current room routes, and a signed paid web
   const proof = JSON.parse(twice.stdout);
   assert.deepEqual(proof.paymentOrder, ["A2", "A1"]);
   assert.deepEqual(proof.server.recapOrder, ["A2", "A1"]);
-  assert.deepEqual(proof.redelivery, { recapCountBefore: 2, recapCountAfter: 2 });
-  assert.equal(proof.paidRecap.id, "paid:" + proof.attempt);
+  assert.deepEqual([proof.passed, proof.failures], [true, []]);
+  assert.equal(proof.redelivery.recapCountBefore, 2);
+  assert.equal(proof.redelivery.recapCountAfter, 2);
+  assert.equal(proof.redelivery.duplicateDeliveryVerified, false);
+  assert.equal(proof.paidRecap.attempt, "A1");
   for (const entry of proof.server.attempts)
     assert.deepEqual(entry, {
       attempt: entry.attempt,
@@ -628,8 +663,10 @@ test("Node: verify-shopify drives the current room routes, and a signed paid web
       cartBound: true,
       snapshotSha256: proof.bagSha256,
     });
-  for (const leak of ["/cart/c/", "token", "invite", "Verifier", proof.attempts[0].id.split("-")[0] + "."])
+  for (const leak of ["/cart/c/", "token", "invite", "Verifier"])
     assert.ok(!twice.stdout.includes(leak), leak);
+  for (const report of [cartOnly.stdout, supervised.stdout, twice.stdout])
+    assert.doesNotMatch(report, /[a-f0-9]{8}-[a-f0-9]{4}-/);
 });
 
 test("a committed bag change replays its original ack after a checkout lease starts; new or altered changes stay locked", async (t) => {

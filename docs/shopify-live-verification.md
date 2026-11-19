@@ -98,11 +98,17 @@ hold, every live order will report `attempt_unbound` or `cart_mismatch` and no r
 
 ## Supervised procedure (only after authorization)
 
-Run it with the Node server so that `--data-dir` can read the room database **read-only**.
-Deploying to Cloudflare needs separate authorization.
+`--data-dir` works only with the Node server: it reads `<dir>/rooms.sqlite` **read-only** and
+fails (`server_db_unreadable` / `server_rows_missing`) unless the file holds exactly this run's
+attempts. Deploying to Cloudflare needs separate authorization.
 
-1. Start the server with the secrets set and `DATA_DIR=<empty test dir>` (`pnpm start`),
-   exposed through a tunnel the owner approves. Register the `orders/paid` webhook to it.
+The verifier's stderr shows checkout URLs, which carry cart keys, to the supervised operator.
+Never redirect, capture or commit stderr. `--out` and stdout hold only the sanitized report:
+attempt labels `A1`/`A2`, no raw ids.
+
+1. Start the server with the secrets set and an empty data directory, keeping stdout:
+   `DATA_DIR=<dir> pnpm start 2>&1 | tee server.log`. Expose it through a tunnel the owner
+   approves, then register the `orders/paid` webhook to it (manual, in Shopify).
 2. Dry check, no order:
    `node scripts/verify-shopify.mjs <base> --allow-cart-create --data-dir=<dir> --out=dry.json`.
    Expected: one attempt `A1`, server `outcome: "opened"`, `cartBound: true`,
@@ -114,28 +120,30 @@ Deploying to Cloudflare needs separate authorization.
    delivery once from Shopify's webhook delivery tooling. Whether a real delivery can be
    resent depends on how the subscription was created, so check this at run time. If it
    cannot, record "redelivery not available": duplicates are then covered only by fixtures.
-4. Capture the matching log lines from the server's stdout. Each line is
-   `{event, outcome, webhookId}`, and nothing else is logged.
+4. Capture the webhook log lines: `grep '"coshop.orders_paid"' server.log > webhook-log.jsonl`.
+   Each line is `{event, outcome, webhookId}`, and nothing else is logged. Delete `server.log`
+   once you have done this.
 
 | Evidence | Expected | Meaning |
 | --- | --- | --- |
 | `evidence.json` `bagSha256` vs `server.attempts[*].snapshotSha256` | equal for `A1` and `A2` | The immutable snapshot equals the bag that was checked out (variant ids and quantities only; no names, pickers or room secrets) |
 | `server.attempts[*]` | `A1` and `A2` both `outcome: "paid"`, `cartBound: true` | Each order matched its own attempt |
 | `paymentOrder` / `server.recapOrder` | `["A2","A1"]` / `["A2","A1"]` | Both events are kept in receipt order; the newest receipt (`A1`) is shown |
-| `paidRecap.id` | `paid:<A1 id>` | — |
-| `redelivery.recapCountBefore` / `After` | `2` / `2` | Exactly one recap per order; the redelivery is a `duplicate` |
+| `paidRecap.attempt` | `A1` | The room shows the recap received last |
+| `passed` / `failures` | `true` / `[]` | The script exits 1 and lists reasons (`paid_recap_missing`, `recap_order`, `snapshot_mismatch_A1`, …) when a requested check fails or times out |
+| `redelivery.recapCountBefore` / `After` | `2` / `2`, `duplicateDeliveryVerified: false` | The redelivery created no recap. The script cannot prove a signed duplicate arrived: the operator must confirm the `duplicate` line in `webhook-log.jsonl` |
 | Log outcomes in receipt order | `recorded`, `recorded`, `duplicate` | `recorded` proves the HMAC, topic and shop matched; the `_coshop_haul` note attribute named this room and attempt; and `sha256(order.cart_token)` equalled the stored cart hash. `unattributed` means the marker or `cart_token` was missing; `cart_mismatch` means the hashes differed |
 | A rejected delivery (if any) | `rejected_signature`, `rejected_topic`, `rejected_shop`, `rejected_body` or `rejected_size` | Why the request got a 401 or 413 |
 
-Do not capture order numbers, customer data, raw `note_attributes`, cart tokens, checkout
-URLs, invites, session tokens or payloads. The attempt ids in `evidence.json` are random
-UUIDs that are only meaningful inside the expired test room.
+Do not capture or commit order numbers, customer data, raw orders, `note_attributes`, cart
+tokens, checkout URLs, invites, session tokens or payloads. The reports name attempts only as
+`A1`/`A2`.
 
 ## Cleanup
 
 The test gateway makes no charges, so no refund is needed. Remove only what this test
 created: archive the test orders, delete the `orders/paid` subscription, revoke the
 Storefront token if it was created for this test, stop the tunnel and the server, and delete
-the test `DATA_DIR`, `dry.json` and `evidence.json`. Do not rotate or delete shared secrets or
+the test `DATA_DIR`, `server.log`, `webhook-log.jsonl`, `dry.json` and `evidence.json`. Do not rotate or delete shared secrets or
 store resources that existed before the test. Any room data that is left is deleted when
 the room expires (24 h `ROOM_TTL_MS` by default).

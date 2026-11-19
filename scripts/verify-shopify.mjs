@@ -6,26 +6,45 @@ import { DatabaseSync } from "node:sqlite";
 import WebSocket from "ws";
 
 const args = process.argv.slice(2);
-const flag = (name) => args.find((arg) => arg.startsWith("--" + name));
-const base = (args.find((arg) => !arg.startsWith("--")) ?? "http://localhost:4193").replace(/\/$/, "");
-const awaitPaid = Number(flag("await-paid")?.split("=")[1] ?? 0);
-const out = flag("out")?.split("=")[1];
-if (!flag("allow-cart-create"))
+const options = new Map();
+for (const arg of args.filter((entry) => entry.startsWith("--"))) {
+  const [, name, value] = arg.match(/^--([a-z-]+)(?:=([\s\S]*))?$/) ?? [];
+  if (!["allow-cart-create", "await-paid", "attempts", "await-redelivery", "data-dir", "out"].includes(name))
+    throw new Error("Unknown option " + arg.split("=")[0] + ".");
+  if ((name === "allow-cart-create") !== (value === undefined) || value === "")
+    throw new Error(
+      name === "allow-cart-create" ? "--allow-cart-create takes no value." : `--${name} needs a value.`,
+    );
+  options.set(name, value ?? true);
+}
+const positional = args.filter((arg) => !arg.startsWith("--"));
+if (positional.length > 1 || (positional[0] && !/^https?:\/\/[^/]+\/?$/.test(positional[0])))
+  throw new Error("Pass only the server origin, for example http://localhost:4193.");
+const base = (positional[0] ?? "http://localhost:4193").replace(/\/$/, "");
+const awaitPaid = Number(options.get("await-paid") ?? 0);
+const out = options.get("out");
+const pollMs = Number(process.env.VERIFY_POLL_MS || 3000);
+if (!options.has("allow-cart-create"))
   throw new Error(
-    "Pass --allow-cart-create to confirm this run may create one Shopify Storefront cart on the server's configured store. No order is placed by this script.",
+    "Pass --allow-cart-create to confirm this run may create Shopify Storefront carts on the server's configured store. No order is placed by this script.",
   );
 if (!Number.isSafeInteger(awaitPaid) || awaitPaid < 0 || awaitPaid > 3600)
   throw new Error("--await-paid must be 0-3600 seconds.");
-const attempts = Number(flag("attempts")?.split("=")[1] ?? 1);
-const redelivery = Number(flag("await-redelivery")?.split("=")[1] ?? 0);
-const dataDir = flag("data-dir")?.split("=")[1];
+const attempts = Number(options.get("attempts") ?? 1);
+const redelivery = Number(options.get("await-redelivery") ?? 0);
+const dataDir = options.get("data-dir");
 if (![1, 2].includes(attempts)) throw new Error("--attempts must be 1 or 2.");
 if (!Number.isSafeInteger(redelivery) || redelivery < 0 || redelivery > 3600)
   throw new Error("--await-redelivery must be 0-3600 seconds.");
 if (redelivery && !(awaitPaid && dataDir))
   throw new Error("--await-redelivery needs --await-paid and --data-dir.");
+if (attempts === 2 && awaitPaid && !dataDir)
+  throw new Error("--attempts=2 with --await-paid needs --data-dir to check recap order.");
 
+// Errors name only the route and status, never the endpoint, invite or body.
+const routes = ["rooms", "catalog", "checkout", "checkout-release", "session"];
 async function call(path, data, token) {
+  const route = routes.find((name) => path.endsWith("/" + name)) ?? "request";
   const response = await fetch(base + path, {
     method: data ? "POST" : "GET",
     headers: {
@@ -33,10 +52,15 @@ async function call(path, data, token) {
       ...(token ? { Authorization: "Bearer " + token } : {}),
     },
     body: data && JSON.stringify(data),
+    signal: AbortSignal.timeout(15000),
+  }).catch(() => {
+    throw new Error(route + ": NETWORK");
   });
-  const value = await response.json();
-  if (!response.ok)
-    throw new Error(`${path.split("/").at(-1)}: ${value.code ?? response.status} ${value.error ?? ""}`.trim());
+  const value = await response.json().catch(() => null);
+  if (!response.ok || !value) {
+    const code = /^[A-Z_]{1,40}$/.test(value?.code) ? " " + value.code : "";
+    throw new Error(`${route}: HTTP ${response.status}${code}`);
+  }
   return value;
 }
 function command(invite, token, message) {
@@ -51,7 +75,7 @@ function command(invite, token, message) {
       ws.terminate();
       error ? reject(error) : resolve(value);
     };
-    ws.on("error", finish);
+    ws.on("error", () => finish(new Error("Socket: NETWORK")));
     ws.on("open", () => ws.send(JSON.stringify({ type: "auth", token })));
     ws.on("message", (raw) => {
       const data = JSON.parse(raw.toString());
@@ -114,9 +138,11 @@ const attempt = opened[0].id;
 const checkoutUrl = opened[0].url;
 const label = (id) => "A" + (opened.findIndex((entry) => entry.id === id) + 1);
 // The room id is the unsigned half of the invite; it is used locally, never reported.
+// Fails unless the file is a CoShop room database holding exactly this run's attempts.
 function server() {
-  const db = new DatabaseSync(join(dataDir, "rooms.sqlite"), { readOnly: true });
+  let db;
   try {
+    db = new DatabaseSync(join(dataDir, "rooms.sqlite"), { readOnly: true });
     const room = host.invite.split(".")[0];
     const rows = db
       .prepare("SELECT id,outcome,cart_token,snapshot FROM haul_checkouts WHERE room_id=? ORDER BY rowid")
@@ -125,13 +151,19 @@ function server() {
       .prepare("SELECT payload FROM haul_recaps WHERE room_id=? ORDER BY sequence")
       .all(room)
       .map((row) => JSON.parse(row.payload).id.replace(/^paid:/, ""));
+    const ids = rows.map((row) => row.id).sort();
+    if (JSON.stringify(ids) !== JSON.stringify(opened.map((entry) => entry.id).sort()))
+      return { failure: "server_rows_missing" };
     return { rows, recaps };
+  } catch {
+    return { failure: "server_db_unreadable" };
   } finally {
-    db.close();
+    db?.close();
   }
 }
 async function serverEvidence() {
-  const { rows, recaps } = server();
+  const { rows, recaps, failure } = server();
+  if (failure) return { failure };
   return {
     attempts: await Promise.all(
       rows.map(async (row) => ({
@@ -155,9 +187,9 @@ if (awaitPaid) {
   );
   const until = Date.now() + awaitPaid * 1000;
   const done = () =>
-    dataDir ? server().recaps.length >= attempts : seen.includes(attempt);
+    dataDir ? (server().recaps?.length ?? 0) >= attempts : seen.includes(attempt);
   while (!done() && Date.now() < until) {
-    await new Promise((resolve) => setTimeout(resolve, 3000));
+    await new Promise((resolve) => setTimeout(resolve, pollMs));
     const { room } = await call(path + "/session", {}, host.token);
     const id = room.recap?.id?.replace(/^paid:/, "");
     if (id && !seen.includes(id)) seen.push(id);
@@ -174,6 +206,23 @@ if (redelivery) {
   await new Promise((resolve) => setTimeout(resolve, redelivery * 1000));
 }
 const evidence = dataDir ? await serverEvidence() : null;
+const failures = [];
+if (awaitPaid && !recap) failures.push("paid_recap_missing");
+if (evidence?.failure) failures.push(evidence.failure);
+else if (evidence) {
+  for (const entry of evidence.attempts) {
+    if (entry.snapshotSha256 !== bagSha256) failures.push("snapshot_mismatch_" + entry.attempt);
+    if (!entry.cartBound) failures.push("cart_unbound_" + entry.attempt);
+    if (entry.outcome !== (awaitPaid ? "paid" : "opened"))
+      failures.push("outcome_" + entry.outcome + "_" + entry.attempt);
+  }
+  if (evidence.attempts.length !== attempts) failures.push("attempt_count");
+  const expected = awaitPaid ? [...opened].reverse().map((entry) => label(entry.id)) : [];
+  if (JSON.stringify(evidence.recapOrder) !== JSON.stringify(expected))
+    failures.push("recap_order");
+  if (redelivery && beforeRedelivery?.recapCount !== evidence.recapCount)
+    failures.push("redelivery_changed_recaps");
+}
 
 const report = {
   verifiedAt: new Date().toISOString(),
@@ -185,12 +234,11 @@ const report = {
   bagTotals: bag.totals,
   bagSha256,
   checkoutHost: checkoutUrl.hostname,
-  attempt,
-  attempts: opened.map((entry) => ({ attempt: label(entry.id), id: entry.id })),
+  attempts: opened.map((entry) => label(entry.id)),
   paymentOrder: [...opened].reverse().map((entry) => label(entry.id)),
   lockReleased: !awaitPaid,
   paidRecap: recap && {
-    id: recap.id,
+    attempt: label(recap.id.replace(/^paid:/, "")),
     mode: recap.mode,
     totalQuantity: recap.totalQuantity,
     totals: recap.totals,
@@ -199,13 +247,19 @@ const report = {
   server: evidence,
   redelivery: redelivery
     ? {
-        recapCountBefore: beforeRedelivery.recapCount,
+        recapCountBefore: beforeRedelivery?.recapCount ?? null,
         recapCountAfter: evidence.recapCount,
+        // The script cannot see the delivery; an unchanged count alone proves nothing.
+        duplicateDeliveryVerified: false,
+        manual: "Confirm a coshop.orders_paid log line with outcome duplicate for this redelivery.",
       }
     : null,
+  passed: failures.length === 0,
+  failures,
   scope: awaitPaid
     ? "Created Storefront carts through the room API and waited for human-placed, authorized test-gateway orders' signed orders/paid webhooks."
     : "Created Storefront carts through the room API. No order or payment was submitted.",
 };
 if (out) await writeFile(out, JSON.stringify(report, null, 2) + "\n");
 console.log(JSON.stringify(report, null, 2));
+if (failures.length) process.exitCode = 1;
