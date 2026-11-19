@@ -132,7 +132,19 @@ export function createRoomStore() {
   const discussion = createDiscussion(command, () =>
     publish({ discussionRevision: (state.discussionRevision || 0) + 1 }),
   );
-  const bag = createBag(command, service, (bag) => publish({ bag }), toast);
+  const bag = createBag(
+    command,
+    service,
+    (next) =>
+      publish({
+        bag: next,
+        ...(state.demoError &&
+        next.confirmed?.revision > (state.bag?.confirmed?.revision ?? Infinity)
+          ? { demoError: "" }
+          : {}),
+      }),
+    toast,
+  );
 
   function setView(view) {
     publish({ view });
@@ -469,6 +481,7 @@ export function createRoomStore() {
       connection = undefined;
       for (const timer of timers) clearTimeout(timer);
       timers.clear();
+      bag.dispose();
     };
   }
 

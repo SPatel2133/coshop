@@ -37,6 +37,7 @@ function Room({ state, store }) {
     quick: null,
   });
   const [notice, setNotice] = useState(null);
+  const panelOrigin = useRef(null);
   const quickToken = useRef(null);
   const anchors = useRef({ finds: 0, threads: new Map() });
   const roomHeading = useRef(null);
@@ -68,6 +69,11 @@ function Room({ state, store }) {
   }, [notice]);
 
   useLayoutEffect(() => focus(roomHeading.current), []);
+  function openPanel(origin) {
+    panelOrigin.current = origin;
+    setNotice(null);
+    setPanel(true);
+  }
   function restore(node, fallback) {
     requestAnimationFrame(() =>
       focus(
@@ -224,7 +230,8 @@ function Room({ state, store }) {
     setPanel(false);
     quickToken.current = null;
     setSocial((current) => ({ ...current, quick: null }));
-    restore(activityButton.current);
+    restore(panelOrigin.current, activityButton.current);
+    panelOrigin.current = null;
   }
 
   function preview(find, node) {
@@ -265,8 +272,7 @@ function Room({ state, store }) {
               }
               onClick={() => {
                 if (panel) return closePanel();
-                setNotice(null);
-                setPanel(true);
+                openPanel(activityButton.current);
               }}
             >
               Around the room{" "}
@@ -313,6 +319,27 @@ function Room({ state, store }) {
             >
               {count}
             </span>
+          </button>
+          <button
+            type="button"
+            className="secondary finds-shortcut"
+            aria-haspopup="dialog"
+            aria-controls="finds-drawer"
+            aria-expanded={panel}
+            aria-label={
+              "Our finds" +
+              (state.unseen ? ", " + state.unseen + " unseen" : "")
+            }
+            onClick={(event) =>
+              panel ? closePanel() : openPanel(event.currentTarget)
+            }
+          >
+            Our finds
+            {state.unseen > 0 && (
+              <span key={state.unseen} className="react-count unseen-pulse">
+                {state.unseen}
+              </span>
+            )}
           </button>
           {state.bag.checkout && (
             <p

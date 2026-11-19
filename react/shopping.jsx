@@ -303,7 +303,11 @@ export function Product({
         </div>
       )}
       <div id="product-detail" className="react-product-detail">
-        <ProductGallery product={product} variant={variant} />
+        <ProductGallery
+          product={product}
+          variant={variant}
+          scope={state.room.id + ":" + state.me}
+        />
         <div className="product-copy">
           <h2 id="product-heading" tabIndex={-1}>
             {product.name || "Untitled product"}

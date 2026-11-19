@@ -1942,3 +1942,48 @@ html.coshop-modal-open body {
     --gallery-height: 32dvh;
   }
 }
+
+/* Room feedback cues */
+.finds-shortcut {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding-inline: var(--space-12);
+}
+.unseen-pulse {
+  animation: confirm-count 420ms var(--motion-ease) both;
+}
+@media (min-width: 1180px) {
+  .finds-shortcut {
+    display: none;
+  }
+}
+.react-bag-line.line-changed {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: 6px;
+  animation: line-changed 1200ms ease-out both;
+}
+@keyframes line-changed {
+  from {
+    background: var(--mist);
+  }
+}
+.line-updated {
+  font-weight: 500;
+}
+.react-bag-line .bag-line-note {
+  grid-column: 2;
+  margin: 0;
+}
+@media (max-width: 520px) {
+  .finds-shortcut {
+    font-size: 12px;
+  }
+}
+@media (max-width: 390px) {
+  .finds-shortcut {
+    padding-inline: var(--space-8);
+  }
+}

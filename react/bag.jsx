@@ -1,4 +1,4 @@
-import React, { useLayoutEffect, useRef } from "react";
+import React, { useId, useLayoutEffect, useRef } from "react";
 import {
   countItems,
   DialogClose,
@@ -21,6 +21,7 @@ export function Bag({ state, store, finish }) {
     releasing,
     feedback,
     cue,
+    changed,
   } = bag;
   const count = items.reduce((sum, item) => sum + item.quantity, 0);
   const blocked = !state.online || Boolean(checkout) || checkoutPending;
@@ -72,6 +73,7 @@ export function Bag({ state, store, finish }) {
                 blocked={blocked || pending.has(item.variantId)}
                 store={store}
                 cue={cue}
+                changed={changed?.variantIds.has(item.variantId)}
               />
             ))}
           </ul>
@@ -155,9 +157,15 @@ export function Bag({ state, store, finish }) {
   );
 }
 
-function BagLine({ item, me, blocked, store, cue }) {
+function BagLine({ item, me, blocked, store, cue, changed }) {
   const row = useRef(null);
+  const noteId = useId();
   const original = item.pickedBy.id === me;
+  const capped = item.quantity >= 99;
+  const notes = [
+    !original && "Only " + item.pickedBy.name + " can lower or remove this.",
+    capped && "Limit 99 per item.",
+  ].filter(Boolean);
   useLayoutEffect(() => {
     const element = row.current;
     return () => {
@@ -166,12 +174,16 @@ function BagLine({ item, me, blocked, store, cue }) {
     };
   }, []);
   return (
-    <li className="react-bag-line" ref={row}>
+    <li
+      className={"react-bag-line" + (changed ? " line-changed" : "")}
+      ref={row}
+    >
       {item.image && <img src={item.image} alt="" loading="lazy" />}
       <div>
         <h3>{item.name}</h3>
         <p>
           {item.variant} · {money(item, "code")}
+          {changed && <strong className="line-updated"> · Updated</strong>}
         </p>
         <p className="bag-picker">
           <Face avatar={item.pickedBy.avatar} />
@@ -203,8 +215,9 @@ function BagLine({ item, me, blocked, store, cue }) {
         </span>
         <button
           className="quiet"
-          aria-disabled={blocked || !item.available || item.quantity >= 99}
+          aria-disabled={blocked || !item.available || capped}
           aria-label={"Increase quantity of " + exact(item)}
+          aria-describedby={capped ? noteId : undefined}
           onClick={() => {
             if (!blocked) store.bag.change("add", item);
           }}
@@ -224,6 +237,11 @@ function BagLine({ item, me, blocked, store, cue }) {
           </button>
         )}
       </div>
+      {notes.length > 0 && (
+        <p id={noteId} className="fine bag-line-note">
+          {notes.join(" ")}
+        </p>
+      )}
     </li>
   );
 }
