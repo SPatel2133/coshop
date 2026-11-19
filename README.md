@@ -53,3 +53,10 @@ See the [deployment runbook](docs/portfolio-preview.md) for preview isolation, o
 - [Trace a rate-limit response from symptom to recovery](docs/evidence/diagnosis.md).
 
 Sharing and adding are separate server commands. That costs an explicit add step and lets shoppers discuss an exact variant without changing anyone’s bag quantity.
+
+## Integration review in progress
+
+The [work tracker](docs/launch/work-tracker.md) records the baseline, focused PRs and remaining review gates. The portfolio handoff contains the [architecture](docs/launch/architecture.md), [60-second demo](docs/launch/demo-script.md), [replay diagnosis](docs/launch/case-study.md) and [interview walkthrough](docs/launch/interview-notes.md). Each document identifies its source and verification boundary. See the [ranked UX audit and recording](docs/launch/ux-audit.md) and the [supervised Shopify test procedure](docs/shopify-live-verification.md).
+
+The public sample experience, synthetic Shopify fixtures and live Shopify order verification have separate evidence boundaries. A supervised development-store test with test payments and explicit order approval is still required to verify the paid attribution chain.
+
