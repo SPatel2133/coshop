@@ -47,7 +47,10 @@ jobs:
           server=$!
           trap 'kill "$server" 2>/dev/null || true; rm -rf "$DATA_DIR"' EXIT
           for attempt in $(seq 30); do
-            curl -sf "$COSHOP_TEST_URL/" > /dev/null && break
+            if grep -q "coshop: http://localhost:$PORT" "$RUNNER_TEMP/coshop-raw/preview.log" &&
+              curl -sf "$COSHOP_TEST_URL/" > /dev/null; then
+              break
+            fi
             if ! kill -0 "$server" 2>/dev/null; then
               echo "::error::Preview server exited during startup"
               exit 1
@@ -58,7 +61,8 @@ jobs:
             fi
             sleep 1
           done
-          pnpm exec playwright test tests/design.spec.js --workers=1 --reporter=list,json
+          pnpm exec playwright test tests/design.spec.js --workers=1 --reporter=list,json \
+            --output "$RUNNER_TEMP/coshop-raw/test-results"
       - name: Evidence reproduce
         if: ${{ !cancelled() }}
         env:
