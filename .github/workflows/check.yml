@@ -17,6 +17,7 @@ jobs:
       - run: pnpm test
   browser:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     env:
       # Same-origin frontend on loopback only; no deployed backend or public origin.
       VITE_ROOM_BACKEND_ORIGIN: ""
