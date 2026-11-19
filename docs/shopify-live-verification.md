@@ -101,8 +101,9 @@ hold, every live order will report `attempt_unbound` or `cart_mismatch` and no r
 Run it with the Node server so that `--data-dir` can read the room database **read-only**.
 Deploying to Cloudflare needs separate authorization.
 
-1. Start the server with the secrets set and `DATA_DIR=<empty test dir>` (`pnpm start`),
-   exposed through a tunnel the owner approves. Register the `orders/paid` webhook to it.
+1. Start the server with the secrets set and an empty data directory, keeping stdout:
+   `DATA_DIR=<dir> pnpm start 2>&1 | tee server.log`. Expose it through a tunnel the owner
+   approves, then register the `orders/paid` webhook to it (manual, in Shopify).
 2. Dry check, no order:
    `node scripts/verify-shopify.mjs <base> --allow-cart-create --data-dir=<dir> --out=dry.json`.
    Expected: one attempt `A1`, server `outcome: "opened"`, `cartBound: true`,
@@ -114,8 +115,9 @@ Deploying to Cloudflare needs separate authorization.
    delivery once from Shopify's webhook delivery tooling. Whether a real delivery can be
    resent depends on how the subscription was created, so check this at run time. If it
    cannot, record "redelivery not available": duplicates are then covered only by fixtures.
-4. Capture the matching log lines from the server's stdout. Each line is
-   `{event, outcome, webhookId}`, and nothing else is logged.
+4. Capture the webhook log lines: `grep '"coshop.orders_paid"' server.log > webhook-log.jsonl`.
+   Each line is `{event, outcome, webhookId}`, and nothing else is logged. Delete `server.log`
+   once you have done this.
 
 | Evidence | Expected | Meaning |
 | --- | --- | --- |
@@ -136,6 +138,6 @@ UUIDs that are only meaningful inside the expired test room.
 The test gateway makes no charges, so no refund is needed. Remove only what this test
 created: archive the test orders, delete the `orders/paid` subscription, revoke the
 Storefront token if it was created for this test, stop the tunnel and the server, and delete
-the test `DATA_DIR`, `dry.json` and `evidence.json`. Do not rotate or delete shared secrets or
+the test `DATA_DIR`, `server.log`, `webhook-log.jsonl`, `dry.json` and `evidence.json`. Do not rotate or delete shared secrets or
 store resources that existed before the test. Any room data that is left is deleted when
 the room expires (24 h `ROOM_TTL_MS` by default).
