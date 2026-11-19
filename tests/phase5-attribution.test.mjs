@@ -475,7 +475,7 @@ for (const worker of [false, true])
     { timeout: 60000 },
     async (t) => {
       const { base } = await launch(t, worker, {
-        TEST_PORT: worker ? "14347" : "14346",
+        TEST_PORT: worker ? "14371" : "14370",
         ...webhookEnv,
       });
       const room = crypto.randomUUID();
@@ -508,7 +508,7 @@ for (const worker of [false, true])
 
 test("Node: verify-shopify drives the current room routes, and a signed paid webhook produces the recap", { timeout: 60000 }, async (t) => {
   const env = {
-    TEST_PORT: "14348",
+    TEST_PORT: "14372",
     ...webhookEnv,
     SHOPIFY_STOREFRONT_TOKEN: "public-token-for-fake-store",
     SHOPIFY_API_VERSION: "2026-10",
@@ -518,7 +518,8 @@ test("Node: verify-shopify drives the current room routes, and a signed paid web
   t.after(() => rm(env.DATA_DIR, { recursive: true, force: true }));
   const { base } = await launch(t, false, env, [
     "--import",
-    fileURLToPath(new URL("./support/fake-shopify.mjs", import.meta.url)),
+    // A file: URL, not a path: Windows rejects bare "C:\\" paths for --import.
+    new URL("./support/fake-shopify.mjs", import.meta.url).href,
   ]);
   const script = fileURLToPath(
     new URL("../scripts/verify-shopify.mjs", import.meta.url),
