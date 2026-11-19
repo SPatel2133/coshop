@@ -12,11 +12,13 @@ class BagModel {
     Object.assign(this, { command, checkoutRequest, publish, error });
     this.pending = new Map();
     this.own = new Set();
+    this.interrupted = new Set();
   }
 
   dispose() {
     clearTimeout(this.changeTimer);
     this.own.clear();
+    this.interrupted.clear();
     this.changed = null;
   }
   pageShow = () => {
@@ -31,6 +33,7 @@ class BagModel {
       this.me = me;
       this.pending.clear();
       this.own.clear();
+      this.interrupted.clear();
       this.checkoutPending = this.releasing = this.departing = false;
       this.cue = null;
       this.bag = null;
@@ -47,7 +50,14 @@ class BagModel {
       if (this.feedback) this.error(this.feedback);
     }
     // Snapshots also follow membership and lease changes; checkout feedback is stale only after a reconnect.
-    else {
+    else if (this.interrupted.size) {
+      // A change that timed out while offline may or may not have been accepted.
+      for (const variantId of this.interrupted) this.remember(identity, variantId);
+      this.interrupted.clear();
+      this.feedback = INTERRUPTED;
+      if (this.reconnecting && !this.checkoutPending) this.checkoutFeedback = "";
+      this.error(INTERRUPTED);
+    } else {
       if (!this.pending.size && this.feedback !== INTERRUPTED) this.feedback = "";
       if (this.reconnecting && !this.checkoutPending) this.checkoutFeedback = "";
     }
@@ -309,9 +319,18 @@ class BagModel {
       this.merge(ack.bag);
       if (!this.isOpen) this.error(this.feedback);
     } catch (error) {
-      this.remember(identity, variantId);
+      const interrupted =
+        error.code === "COMMAND_TIMEOUT" &&
+        !this.online &&
+        identity === this.identity;
+      if (interrupted) this.interrupted.add(variantId);
+      else this.remember(identity, variantId);
       if (this.pending.get(variantId) !== pending) return;
       this.pending.delete(variantId);
+      if (interrupted) {
+        this.feedback = "";
+        return this.render();
+      }
       this.feedback = error.message;
       this.render();
       if (!this.isOpen) this.error(error.message);

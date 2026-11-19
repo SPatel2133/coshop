@@ -227,6 +227,29 @@ test("checkout feedback survives lease snapshots but clears after a real reconne
     model.snapshot(room(null), "me");
     assert.equal(view.feedback, "", "the first snapshot after a reconnect clears it");
     assert.equal(view.changed, null);
+
+    let reject;
+    const timed = createBag(
+      () => new Promise((_, no) => (reject = no)),
+      null,
+      (next) => (view = next),
+      () => {},
+    );
+    timed.setConnected(true);
+    timed.snapshot({ ...room(null), checkoutEnabled: false }, "me");
+    timed.change("add", { ...bag.items[0], name: "Cap", variant: "Black" });
+    assert.ok(view.pending.has("a"), "Saving stays while the change is pending");
+    timed.setConnected(false);
+    reject(Object.assign(new Error("Couldn’t confirm that action."), { code: "COMMAND_TIMEOUT" }));
+    await new Promise((resolve) => setTimeout(resolve));
+    assert.equal(view.feedback, "");
+    assert.ok(storage.has("coshop:bag-pending:room:me"), "the marker survives a reload before reconnect");
+    timed.setConnected(true);
+    timed.snapshot({ ...room(null), checkoutEnabled: false }, "me");
+    assert.equal(view.feedback, "Review your bag; an update was interrupted.");
+    assert.equal(storage.has("coshop:bag-pending:room:me"), false);
+    timed.snapshot({ ...room(null), checkoutEnabled: false }, "me");
+    assert.equal(view.feedback, "Review your bag; an update was interrupted.", "the notice stays until the next action");
   } finally {
     if (previousStorage) Object.defineProperty(globalThis, "sessionStorage", previousStorage);
     else delete globalThis.sessionStorage;

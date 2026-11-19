@@ -917,8 +917,20 @@ for (const width of [360, 390, 1280, 1440]) {
 }
 
 async function routeRoomSocket(page) {
-  const route = { send: (m) => m, receive: (m) => m };
+  const sockets = new Set();
+  const route = {
+    send: (m) => m,
+    receive: (m) => m,
+    outage: false,
+    drop() {
+      route.outage = true;
+      for (const ws of sockets) ws.close();
+      sockets.clear();
+    },
+  };
   await page.routeWebSocket(/.*/, (ws) => {
+    if (route.outage) return ws.close();
+    sockets.add(ws);
     const server = ws.connectToServer();
     ws.onMessage((message) => {
       const next = route.send(String(message));
@@ -1189,6 +1201,52 @@ test("opening the desktop finds dock right after a small product-page scroll kee
       await expect(page.locator("#open-finds")).toBeFocused();
       expect(await page.evaluate(() => scrollY)).toBe(aligned + 9);
     }
+  } finally {
+    await context.close();
+  }
+});
+
+test("a bag change that times out during a long outage asks the shopper to review after reconnect", async ({ page, browser }) => {
+  test.setTimeout(120000);
+  const context = await browser.newContext();
+  const maya = await context.newPage();
+  try {
+    for (const shopper of [page, maya]) await shopper.setViewportSize({ width: 390, height: 800 });
+    const route = await routeRoomSocket(page);
+    await room(page);
+    await joinRoom(page, maya, "Maya");
+    await openHeadphones(page);
+    const toast = page.locator(".react-toast");
+    const outage = async (expected, peerProduct) => {
+      route.drop();
+      await expect(page.getByText("Reconnecting…", { exact: true }).first()).toBeVisible();
+      await expect(page.getByRole("button", { name: "Saving…" })).toBeVisible();
+      await maya.getByRole("button", { name: "Quick add " + peerProduct }).click();
+      await maya.getByRole("dialog").getByRole("button", { name: "Add to bag" }).click();
+      await maya.keyboard.press("Escape");
+      await page.waitForTimeout(16500);
+      route.send = pass;
+      route.receive = pass;
+      route.outage = false;
+      await expect(page.getByText("Connected", { exact: true })).toBeVisible({ timeout: 20000 });
+      await expect(toast).toHaveText(interrupted);
+      await bagCount(page, expected);
+      await page.waitForTimeout(3000);
+      await bagCount(page, expected);
+      await page.locator("#open-bag").click();
+      await expect(page.locator("#bag-status")).toHaveText(interrupted);
+      await page.keyboard.press("Escape");
+    };
+
+    route.send = (m) => (m.includes('"bag_change"') ? null : m);
+    await page.getByRole("button", { name: "Add to bag" }).click();
+    await outage(1, "Backpack");
+    await expect(page.locator("#open-bag")).toHaveAccessibleName("Shared bag, 1 item");
+
+    route.receive = (m) => (m.includes('"command_ack"') && m.includes('"bag"') ? null : m);
+    await page.getByRole("button", { name: "Add to bag" }).click();
+    await bagCount(page, 2);
+    await outage(3, "Reading Chair");
   } finally {
     await context.close();
   }
