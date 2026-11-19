@@ -74,6 +74,7 @@ export function createRoomStore() {
   let shareTimer;
   let cooldownTimer;
   let busy = false;
+  let reconnecting = false;
   let finds = new FindsState();
   const timers = new Set();
   const listeners = new Set();
@@ -222,7 +223,9 @@ export function createRoomStore() {
           localStorage.setItem(key, JSON.stringify(ids));
         } catch {}
       });
-    }
+    } else if (reconnecting && state.demoError && !state.demoPending)
+      publish({ demoError: "" });
+    reconnecting = false;
     finds.snapshot(room.finds);
     const lastOwnShare = Math.max(
       0,
@@ -327,6 +330,7 @@ export function createRoomStore() {
       },
       onShopping: shopping,
       onStatus: (online) => {
+        if (!online) reconnecting = true;
         publish({ online });
         discussion.setConnected(online);
         bag.setConnected(online);

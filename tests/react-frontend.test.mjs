@@ -190,3 +190,43 @@ test("bag highlights only changed lines on resync and flags an interrupted chang
     else delete globalThis.sessionStorage;
   }
 });
+
+test("checkout feedback survives lease snapshots but clears after a real reconnect", async () => {
+  const storage = new Map();
+  const previousStorage = Object.getOwnPropertyDescriptor(globalThis, "sessionStorage");
+  Object.defineProperty(globalThis, "sessionStorage", {
+    configurable: true,
+    value: {
+      getItem: (key) => (storage.has(key) ? storage.get(key) : null),
+      setItem: (key, value) => storage.set(key, String(value)),
+      removeItem: (key) => storage.delete(key),
+    },
+  });
+  try {
+    const bag = { revision: 1, pricedAt: 1, items: [{ variantId: "a", quantity: 1, cents: 1000, available: true, pickedBy: { id: "me" } }] };
+    const room = (checkout) => ({ id: "room", checkoutEnabled: true, checkout, bag });
+    let view;
+    const model = createBag(
+      () => new Promise(() => {}),
+      async () => {
+        throw Object.assign(new Error("A price changed. Review your bag."), { code: "CHECKOUT_REVIEW" });
+      },
+      (next) => (view = next),
+      () => {},
+    );
+    model.setConnected(true);
+    model.snapshot(room(null), "me");
+    await model.startCheckout();
+    assert.equal(view.feedback, "A price changed. Review your bag.");
+    model.snapshot(room(null), "me");
+    assert.equal(view.feedback, "A price changed. Review your bag.", "a lease snapshot keeps the fresh error");
+    model.setConnected(false);
+    model.setConnected(true);
+    model.snapshot(room(null), "me");
+    assert.equal(view.feedback, "", "the first snapshot after a reconnect clears it");
+    assert.equal(view.changed, null);
+  } finally {
+    if (previousStorage) Object.defineProperty(globalThis, "sessionStorage", previousStorage);
+    else delete globalThis.sessionStorage;
+  }
+});

@@ -1116,3 +1116,40 @@ test("an own add confirmation does not linger after a peer changes the bag live"
     await context.close();
   }
 });
+
+test("a failed demo completion survives a peer joining but clears after a real reconnect", async ({ page, browser }) => {
+  const context = await browser.newContext();
+  const maya = await context.newPage();
+  try {
+    await page.setViewportSize({ width: 390, height: 800 });
+    await page.route(/\/haul-demo$/, (request) =>
+      request.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ code: "TEST_DEMO", message: "Demo recap failed in test." }),
+      }),
+    );
+    await room(page);
+    await openHeadphones(page);
+    await page.getByRole("button", { name: "Add to bag" }).click();
+    await bagCount(page, 1);
+    await page.locator("#open-bag").click();
+    const status = page.locator("#bag-status");
+    await page.getByRole("button", { name: "Demo completion · simulated" }).click();
+    await expect(status).toHaveText("Demo recap failed in test.");
+    await page.keyboard.press("Escape");
+    await joinRoom(page, maya, "Maya");
+    await expect(page.locator(".react-presence")).toContainText("Maya");
+    await page.locator("#open-bag").click();
+    await expect(status).toHaveText("Demo recap failed in test.");
+    await page.context().setOffline(true);
+    await expect(status).toHaveText("Reconnecting… Your bag is saved.");
+    await page.context().setOffline(false);
+    await expect(page.getByText("Connected", { exact: true })).toBeVisible();
+    await expect(status).toHaveText("");
+    await bagCount(page, 1);
+    await expect(page.locator("#bag-items .line-changed")).toHaveCount(0);
+  } finally {
+    await context.close();
+  }
+});

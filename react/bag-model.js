@@ -44,8 +44,12 @@ class BagModel {
       } catch {}
       if (this.feedback) this.error(this.feedback);
     }
-    // Snapshots also follow membership and lease changes, so only bag-action feedback is cleared here.
-    else if (!this.pending.size && this.feedback !== INTERRUPTED) this.feedback = "";
+    // Snapshots also follow membership and lease changes; checkout feedback is stale only after a reconnect.
+    else {
+      if (!this.pending.size && this.feedback !== INTERRUPTED) this.feedback = "";
+      if (this.reconnecting && !this.checkoutPending) this.checkoutFeedback = "";
+    }
+    this.reconnecting = false;
     this.checkoutEnabled = room.checkoutEnabled;
     this.checkout = room.checkout;
     this.merge(room.bag, null, true);
@@ -239,6 +243,7 @@ class BagModel {
   }
   setConnected(online) {
     this.online = online;
+    if (!online) this.reconnecting = true;
     if (!online)
       for (const pending of this.pending.values()) pending.confirmed = true;
     this.render();
