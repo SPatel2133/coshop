@@ -525,7 +525,16 @@ export class Rooms {
             touch,
           );
         if (message.type === "bag_change") {
-          if (this.checkout?.active(id))
+          // A committed request replays its original ack even while locked;
+          // Bag.command rejects replays that change meaning or owner.
+          const replay =
+            typeof message.requestId === "string" &&
+            this.store.all(
+              "SELECT 1 FROM events WHERE id=? AND room_id=?",
+              message.requestId,
+              id,
+            ).length;
+          if (!replay && this.checkout?.active(id))
             throw new RoomError(
               "CHECKOUT_BUSY",
               "The shared bag is locked while someone checks out.",
@@ -571,7 +580,7 @@ export class Rooms {
         };
       });
     } catch (error) {
-      if (!error.code) throw error;
+      if (!(error instanceof RoomError)) throw error;
       return {
         ack: {
           type: "command_ack",

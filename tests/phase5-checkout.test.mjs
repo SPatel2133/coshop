@@ -98,6 +98,7 @@ const names = [
   "discussion",
   "storefront",
   "haul",
+  "checkout_resume",
 ];
 async function setup(t, haul = false) {
   let now = 100000;
@@ -227,16 +228,19 @@ test("paid recap follows the verified order, not the unlocked bag or abandoned c
   await assert.rejects(deliver(event, undefined, "wrong.myshopify.com"), {
     code: "WEBHOOK_SIGNATURE",
   });
-  assert.equal(await deliver({ ...event, financial_status: "pending" }), null);
+  assert.deepEqual(await deliver({ ...event, financial_status: "pending" }), {
+    order: null,
+    outcome: "not_paid",
+  });
   assert.equal(
     await rooms.haul.paid(
-      await deliver({ ...event, cart_token: "another-cart" }),
+      (await deliver({ ...event, cart_token: "another-cart" })).order,
     ),
-    false,
+    "cart_mismatch",
   );
-  const verified = await deliver(event);
-  assert.equal(await rooms.haul.paid(verified), true);
-  assert.equal(await rooms.haul.paid(verified), false);
+  const { order: verified } = await deliver(event);
+  assert.equal(await rooms.haul.paid(verified), "recorded");
+  assert.equal(await rooms.haul.paid(verified), "duplicate");
   const { recap } = rooms.snapshot(room);
   assert.equal(recap.mode, "paid");
   assert.equal(recap.items[0].pickedBy.name, "Maya");

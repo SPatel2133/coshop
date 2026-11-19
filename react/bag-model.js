@@ -65,16 +65,41 @@ class BagModel {
     this.render();
     const id = navigationId();
     const identity = this.identity;
+    const request = {
+      id,
+      revision: this.bag.revision,
+      pricedAt: this.bag.pricedAt,
+    };
+    // Saved first so a lock from a lost response is released on return.
     try {
-      const result = await this.checkoutRequest("checkout", {
-        id,
-        revision: this.bag.revision,
-        pricedAt: this.bag.pricedAt,
-      });
+      sessionStorage.setItem("coshop:checkout:" + identity, id);
+    } catch {}
+    try {
+      let result;
+      // Retrying the same id resumes a checkout whose response was lost.
+      for (let attempt = 1; ; attempt++)
+        try {
+          result = await this.checkoutRequest("checkout", request);
+          break;
+        } catch (error) {
+          if (
+            attempt === 3 ||
+            !["NETWORK", "CHECKOUT_PENDING"].includes(error.code)
+          )
+            throw error;
+          await new Promise((resolve) =>
+            setTimeout(resolve, (this.retryDelay ?? 750) * attempt),
+          );
+          if (identity !== this.identity) return;
+        }
       if (identity !== this.identity) return;
-      try {
-        sessionStorage.setItem("coshop:checkout:" + identity, id);
-      } catch {}
+      if (result.checkout?.id && result.checkout.id !== id)
+        try {
+          sessionStorage.setItem(
+            "coshop:checkout:" + identity,
+            result.checkout.id,
+          );
+        } catch {}
       this.departing = true;
       location.assign(result.checkoutUrl);
     } catch (error) {

@@ -15,8 +15,19 @@ const review = () =>
     "Price or availability changed. Review the updated bag before continuing.",
     409,
   );
+// Lowercase only: the orders/paid marker is matched case-sensitively.
 const uuid =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const unchanged = (before, after) =>
+  before.length === after.length &&
+  after.every(
+    (item, index) =>
+      item.variantId === before[index].variantId &&
+      item.quantity === before[index].quantity &&
+      item.cents === before[index].cents &&
+      item.currency === before[index].currency &&
+      item.available === before[index].available,
+  );
 
 export class Checkout {
   constructor(rooms) {
@@ -82,11 +93,30 @@ export class Checkout {
         "Use the checkout button to continue.",
       );
     const bag = this.store.transaction(() => {
-      if (this.active(room))
+      const lease = this.active(room);
+      if (lease?.shopperId === person.id) {
+        // The holder retried after a lost response: hand back the same cart.
+        const resume = this.store.all(
+          "SELECT checkout_url FROM checkout_leases WHERE room_id=?",
+          room,
+        )[0]?.checkout_url;
+        if (resume) return { resume };
+        throw new RoomError(
+          "CHECKOUT_PENDING",
+          "Shopify checkout is still being prepared. Try again in a moment.",
+          409,
+        );
+      }
+      if (lease)
         throw new RoomError(
           "CHECKOUT_BUSY",
           "Someone is already checking out.",
           409,
+        );
+      if (this.rooms.haul?.attempt(room, id))
+        throw new RoomError(
+          "CHECKOUT_REQUEST",
+          "That checkout attempt has ended. Start checkout again.",
         );
       const current = this.rooms.roomBag(room).snapshot(room);
       if (revision !== current.revision || pricedAt !== current.pricedAt)
@@ -116,7 +146,7 @@ export class Checkout {
         );
       this.store.run(
         `INSERT INTO checkout_leases(room_id,id,user_id,expires_at) VALUES(?,?,?,?)
-        ON CONFLICT(room_id) DO UPDATE SET id=excluded.id,user_id=excluded.user_id,expires_at=excluded.expires_at`,
+        ON CONFLICT(room_id) DO UPDATE SET id=excluded.id,user_id=excluded.user_id,expires_at=excluded.expires_at,checkout_url=NULL`,
         room,
         id,
         person.id,
@@ -125,6 +155,10 @@ export class Checkout {
       this.rooms.bump(room, this.clock(), true);
       return current;
     });
+    if (bag.resume)
+      return { checkoutUrl: bag.resume, checkout: this.active(room) };
+    let saved = false;
+    let returned = false;
     const checkLease = () => {
       this.rooms.require(room);
       if (this.active(room)?.id !== id) throw expired();
@@ -159,25 +193,33 @@ export class Checkout {
         room,
       );
       const current = this.rooms.roomBag(room).snapshot(room);
-      if (
-        current.items.some(
-          (item, index) =>
-            item.cents !== bag.items[index].cents ||
-            item.currency !== bag.items[index].currency ||
-            item.available !== bag.items[index].available,
-        )
-      )
-        throw review();
+      if (!unchanged(bag.items, current.items)) throw review();
       if (current.unavailable)
         throw new RoomError(
           "BAG_UNAVAILABLE",
           "An item is no longer available. Its picker can remove it from the bag.",
           409,
         );
+      // Persist the immutable attempt snapshot before the external cartCreate.
+      // The cart token is bound only after Shopify's response is validated.
+      this.store.transaction(() => {
+        checkLease();
+        this.rooms.haul?.saveCheckout(room, id, client.domain, current.items);
+      });
+      saved = true;
       const cart = await client.checkout(
         current.items,
         this.rooms.haul && [{ key: haulAttribute, value: room + "." + id }],
       );
+      returned = true;
+      const cartToken = /^gid:\/\/shopify\/Cart\/([^?]+)(?:\?|$)/.exec(
+        cart.id ?? "",
+      )?.[1];
+      const cartHash =
+        this.rooms.haul && cartToken ? await digest(cartToken) : null;
+      // Bind the returned cart even if this attempt is then refused, so a
+      // later paid order on it is diagnosed rather than unknown.
+      if (cartHash) this.rooms.haul.bindCart(room, id, cartHash);
       checkLease();
       const subtotal = moneyDetails(cart.cost?.subtotalAmount);
       if (
@@ -197,35 +239,49 @@ export class Checkout {
           "Shopify returned a checkout address outside this store.",
           502,
         );
-      const cartToken = /^gid:\/\/shopify\/Cart\/([^?]+)(?:\?|$)/.exec(
-        cart.id ?? "",
-      )?.[1];
-      const cartHash =
-        this.rooms.haul && cartToken ? await digest(cartToken) : null;
-      checkLease();
+      if (this.rooms.haul && !cartHash) {
+        console.warn(
+          JSON.stringify({
+            event: "coshop.checkout",
+            outcome: "attribution_unavailable",
+          }),
+        );
+        throw new RoomError(
+          "CHECKOUT_ATTRIBUTION",
+          "Shopify returned a cart CoShop can’t track, so no checkout was opened. Try again.",
+          502,
+        );
+      }
       this.store.transaction(() => {
-        if (cartHash)
-          this.rooms.haul.saveCheckout(
-            room,
-            id,
-            client.domain,
-            cartHash,
-            current.items,
-          );
+        checkLease();
+        this.rooms.haul?.settle(room, id, "opened");
         this.store.run(
-          "UPDATE checkout_leases SET expires_at=? WHERE room_id=? AND id=?",
+          "UPDATE checkout_leases SET expires_at=?,checkout_url=? WHERE room_id=? AND id=?",
           this.clock() + 5 * 60000,
+          url.href,
           room,
           id,
         );
       });
       return { checkoutUrl: url.href, checkout: this.active(room) };
     } catch (error) {
-      this.store.run(
-        "DELETE FROM checkout_leases WHERE room_id=? AND id=?",
-        room,
-        id,
-      );
+      this.store.transaction(() => {
+        this.store.run(
+          "DELETE FROM checkout_leases WHERE room_id=? AND id=?",
+          room,
+          id,
+        );
+        if (saved)
+          this.rooms.haul?.settle(
+            room,
+            id,
+            error.code === "CHECKOUT_ENDED"
+              ? "withheld"
+              : returned || error instanceof ShopifyCartError
+                ? "rejected"
+                : "unconfirmed",
+          );
+      });
       if (error instanceof RoomError) throw error;
       if (error instanceof ShopifyCartError)
         throw new RoomError(

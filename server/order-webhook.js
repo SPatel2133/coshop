@@ -8,6 +8,17 @@ const denied = () =>
 const gid = /^gid:\/\/shopify\/Order\/\d{1,25}$/;
 const marker = /^([a-f0-9-]{36})\.([a-f0-9-]{36})$/;
 
+// Resolves to { order, outcome }; order is null when the event is ignored.
+export function logWebhook(request, outcome) {
+  const id = request.headers.get("x-shopify-webhook-id") ?? "";
+  console.log(
+    JSON.stringify({
+      event: "coshop.orders_paid",
+      outcome,
+      webhookId: /^[A-Za-z0-9-]{1,64}$/.test(id) ? id : null,
+    }),
+  );
+}
 export async function readPaidWebhook(request, config) {
   const { webhookSecret, domain } = config.shopify;
   if (!webhookSecret || !domain || request.method !== "POST")
@@ -70,7 +81,8 @@ export async function readPaidWebhook(request, config) {
   } catch {
     throw new RoomError("INVALID_ORDER", "Invalid order data.");
   }
-  if (order?.financial_status !== "paid") return null;
+  if (order?.financial_status !== "paid")
+    return { order: null, outcome: "not_paid" };
   const tag =
     Array.isArray(order.note_attributes) &&
     order.note_attributes.find((entry) => entry?.name === haulAttribute);
@@ -85,7 +97,7 @@ export async function readPaidWebhook(request, config) {
     !order.line_items.length ||
     order.line_items.length > 250
   )
-    return null;
+    return { order: null, outcome: "unattributed" };
   try {
     const total = order.total_price_set?.presentment_money ?? {
       amount: order.total_price,
@@ -114,14 +126,19 @@ export async function readPaidWebhook(request, config) {
             : "",
       };
     });
+    const paidAt = Date.parse(order.processed_at ?? order.created_at ?? "");
     return {
-      room: match[1],
-      attempt: match[2],
-      shop,
-      cartToken: order.cart_token,
-      orderId: order.admin_graphql_api_id,
-      totals,
-      lines,
+      outcome: "verified",
+      order: {
+        room: match[1],
+        attempt: match[2],
+        shop,
+        cartToken: order.cart_token,
+        orderId: order.admin_graphql_api_id,
+        paidAt: Number.isFinite(paidAt) ? paidAt : null,
+        totals,
+        lines,
+      },
     };
   } catch {
     throw new RoomError("INVALID_ORDER", "Invalid order details.");
