@@ -16,6 +16,7 @@ class BagModel {
 
   dispose() {
     clearTimeout(this.changeTimer);
+    this.own.clear();
     this.changed = null;
   }
   pageShow = () => {
@@ -29,6 +30,7 @@ class BagModel {
       this.identity = identity;
       this.me = me;
       this.pending.clear();
+      this.own.clear();
       this.checkoutPending = this.releasing = this.departing = false;
       this.cue = null;
       this.bag = null;
