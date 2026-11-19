@@ -1,5 +1,8 @@
 import { navigationId } from "../client/realtime.js";
 
+export const INTERRUPTED = "Review your bag; an update was interrupted.";
+const pendingKey = (identity) => "coshop:bag-pending:" + identity;
+
 export function createBag(command, checkoutRequest, publish, error) {
   return new BagModel(command, checkoutRequest, publish, error);
 }
@@ -8,8 +11,16 @@ class BagModel {
   constructor(command, checkoutRequest, publish, error) {
     Object.assign(this, { command, checkoutRequest, publish, error });
     this.pending = new Map();
+    this.own = new Set();
+    this.interrupted = new Set();
   }
 
+  dispose() {
+    clearTimeout(this.changeTimer);
+    this.own.clear();
+    this.interrupted.clear();
+    this.changed = null;
+  }
   pageShow = () => {
     this.departing = false;
     this.releaseOnReturn();
@@ -21,18 +32,42 @@ class BagModel {
       this.identity = identity;
       this.me = me;
       this.pending.clear();
+      this.own.clear();
+      this.interrupted.clear();
       this.checkoutPending = this.releasing = this.departing = false;
       this.cue = null;
       this.bag = null;
       this.feedback = "";
       this.checkoutFeedback = "";
+      this.changed = null;
+      clearTimeout(this.changeTimer);
+      // A marker left by an unacknowledged change means it may or may not have been accepted.
+      try {
+        if (sessionStorage.getItem(pendingKey(identity)))
+          this.feedback = INTERRUPTED;
+        sessionStorage.removeItem(pendingKey(identity));
+      } catch {}
+      if (this.feedback) this.error(this.feedback);
     }
+    // Snapshots also follow membership and lease changes; checkout feedback is stale only after a reconnect.
+    else if (this.interrupted.size) {
+      // A change that timed out while offline may or may not have been accepted.
+      for (const variantId of this.interrupted) this.remember(identity, variantId);
+      this.interrupted.clear();
+      this.feedback = INTERRUPTED;
+      if (this.reconnecting && !this.checkoutPending) this.checkoutFeedback = "";
+      this.error(INTERRUPTED);
+    } else {
+      if (!this.pending.size && this.feedback !== INTERRUPTED) this.feedback = "";
+      if (this.reconnecting && !this.checkoutPending) this.checkoutFeedback = "";
+    }
+    this.reconnecting = false;
     this.checkoutEnabled = room.checkoutEnabled;
     this.checkout = room.checkout;
-    this.merge(room.bag);
+    this.merge(room.bag, null, true);
     this.releaseOnReturn();
   }
-  merge(bag, change) {
+  merge(bag, change, resync = false) {
     if (change) {
       const pending = this.pending.get(change.variantId);
       if (pending?.id === change.requestId) pending.confirmed = true;
@@ -43,11 +78,75 @@ class BagModel {
       (bag.revision === this.bag.revision &&
         (bag.pricedAt ?? 0) > (this.bag.pricedAt ?? 0))
     ) {
+      const previous = this.bag;
       this.bag = bag;
       if (change?.action === "add")
         this.cue = { id: change.requestId, variantId: change.variantId };
+      if (previous && (resync || (change && !change.action)))
+        this.highlight(previous, bag, resync);
+      else if (
+        change?.action &&
+        !this.own.has(change.requestId) &&
+        !this.pending.size &&
+        this.feedback !== INTERRUPTED
+      )
+        this.feedback = "";
     }
     this.render();
+  }
+  highlight(previous, bag, resync) {
+    if (!this.pending.size) {
+      if (this.feedback !== INTERRUPTED) this.feedback = "";
+      if (resync) this.checkoutFeedback = "";
+    }
+    const before = new Map(previous.items.map((item) => [item.variantId, item]));
+    const after = new Set(bag.items.map((item) => item.variantId));
+    const ids = bag.items
+      .filter((item) => {
+        const old = before.get(item.variantId);
+        return (
+          !old ||
+          old.quantity !== item.quantity ||
+          old.cents !== item.cents ||
+          old.currency !== item.currency ||
+          old.available !== item.available
+        );
+      })
+      .map((item) => item.variantId);
+    const removed = previous.items.filter(
+      (item) => !after.has(item.variantId),
+    ).length;
+    if (!ids.length && !removed) return;
+    clearTimeout(this.changeTimer);
+    this.changed = ids.length
+      ? { id: navigationId(), variantIds: new Set(ids) }
+      : null;
+    if (!this.pending.size && this.feedback !== INTERRUPTED)
+      this.feedback =
+        "Bag refreshed · " +
+        [
+          ids.length && ids.length + (ids.length === 1 ? " line" : " lines") + " changed",
+          removed && removed + " removed",
+        ]
+          .filter(Boolean)
+          .join(", ") +
+        ".";
+    this.changeTimer = setTimeout(() => {
+      this.changed = null;
+      if (this.feedback.startsWith("Bag refreshed")) this.feedback = "";
+      this.render();
+    }, this.highlightMs ?? 4000);
+  }
+  remember(identity, variantId, requestId) {
+    try {
+      const key = pendingKey(identity);
+      const marks = JSON.parse(sessionStorage.getItem(key) || "{}");
+      if (requestId) marks[variantId] = requestId;
+      else delete marks[variantId];
+      if (Object.keys(marks).length)
+        sessionStorage.setItem(key, JSON.stringify(marks));
+      else sessionStorage.removeItem(key);
+    } catch {}
   }
   async startCheckout() {
     if (
@@ -65,16 +164,41 @@ class BagModel {
     this.render();
     const id = navigationId();
     const identity = this.identity;
+    const request = {
+      id,
+      revision: this.bag.revision,
+      pricedAt: this.bag.pricedAt,
+    };
+    // Saved first so a lock from a lost response is released on return.
     try {
-      const result = await this.checkoutRequest("checkout", {
-        id,
-        revision: this.bag.revision,
-        pricedAt: this.bag.pricedAt,
-      });
+      sessionStorage.setItem("coshop:checkout:" + identity, id);
+    } catch {}
+    try {
+      let result;
+      // Retrying the same id resumes a checkout whose response was lost.
+      for (let attempt = 1; ; attempt++)
+        try {
+          result = await this.checkoutRequest("checkout", request);
+          break;
+        } catch (error) {
+          if (
+            attempt === 3 ||
+            !["NETWORK", "CHECKOUT_PENDING"].includes(error.code)
+          )
+            throw error;
+          await new Promise((resolve) =>
+            setTimeout(resolve, (this.retryDelay ?? 750) * attempt),
+          );
+          if (identity !== this.identity) return;
+        }
       if (identity !== this.identity) return;
-      try {
-        sessionStorage.setItem("coshop:checkout:" + identity, id);
-      } catch {}
+      if (result.checkout?.id && result.checkout.id !== id)
+        try {
+          sessionStorage.setItem(
+            "coshop:checkout:" + identity,
+            result.checkout.id,
+          );
+        } catch {}
       this.departing = true;
       location.assign(result.checkoutUrl);
     } catch (error) {
@@ -130,6 +254,7 @@ class BagModel {
   }
   setConnected(online) {
     this.online = online;
+    if (!online) this.reconnecting = true;
     if (!online)
       for (const pending of this.pending.values()) pending.confirmed = true;
     this.render();
@@ -172,12 +297,17 @@ class BagModel {
       ...(action === "remove" ? { expectedQuantity: actual.quantity } : {}),
     };
     const pending = { id: navigationId(), action, item };
+    const identity = this.identity;
     this.pending.set(variantId, pending);
+    this.own.add(pending.id);
+    if (this.own.size > 64) this.own.delete(this.own.values().next().value);
+    this.remember(identity, variantId, pending.id);
     this.checkoutFeedback = "";
     this.feedback = "Saving your bag…";
     this.render();
     try {
       const ack = await this.command("bag_change", payload, pending.id);
+      this.remember(identity, variantId);
       if (this.pending.get(variantId) !== pending) return;
       this.pending.delete(variantId);
       this.feedback =
@@ -189,8 +319,18 @@ class BagModel {
       this.merge(ack.bag);
       if (!this.isOpen) this.error(this.feedback);
     } catch (error) {
+      const interrupted =
+        error.code === "COMMAND_TIMEOUT" &&
+        !this.online &&
+        identity === this.identity;
+      if (interrupted) this.interrupted.add(variantId);
+      else this.remember(identity, variantId);
       if (this.pending.get(variantId) !== pending) return;
       this.pending.delete(variantId);
+      if (interrupted) {
+        this.feedback = "";
+        return this.render();
+      }
       this.feedback = error.message;
       this.render();
       if (!this.isOpen) this.error(error.message);
@@ -208,6 +348,7 @@ class BagModel {
       releasing: this.releasing,
       feedback: this.checkoutFeedback || this.feedback || "",
       cue: this.cue,
+      changed: this.changed,
     });
   }
 }

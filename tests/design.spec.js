@@ -54,7 +54,7 @@ for (const [width, columns, gap] of [
         path: process.env.COSHOP_EVIDENCE + `/room-${width}.png`,
       });
     }
-    const opener = page.getByRole("button", { name: "Around the room" });
+    const opener = page.getByRole("button", { name: "Our finds" });
     await opener.focus();
     await page.keyboard.press("Enter");
     const drawer = page.getByRole("dialog", { name: "Around the room" });
@@ -99,6 +99,35 @@ for (const [width, columns, gap] of [
   });
 }
 
+test("mobile Quick add links senders to Our finds and receivers to the exact find", async ({ page, browser }) => {
+  await page.setViewportSize({ width: 390, height: 800 });
+  const context = await browser.newContext({ viewport: { width: 390, height: 800 }, hasTouch: true });
+  try {
+    const peer = await context.newPage();
+    await room(page);
+    await joinRoom(page, peer, "Maya");
+    await page.getByRole("button", { name: "Quick add Over-Ear Headphones" }).click();
+    const quick = page.getByRole("dialog", { name: "Over-Ear Headphones" });
+    await quick.getByRole("combobox").selectOption("audio-1");
+    await quick.getByRole("button", { name: "Share find" }).click();
+    await expect(quick.getByRole("status")).toHaveText("Shared to Our finds.");
+    await quick.getByRole("button", { name: "Open Our finds" }).click();
+    await expect(quick).toBeHidden();
+    await expect(page.getByRole("dialog", { name: "Around the room" }).locator('[data-find-variant="audio-1"]')).toBeVisible();
+    const launcher = peer.locator("#open-finds");
+    await expect(launcher).toHaveAccessibleName("Our finds, 1 new");
+    await expect(peer.locator(".find-notice")).toContainText("Sam shared Over-Ear Headphones");
+    await peer.getByRole("button", { name: "View find", exact: true }).tap();
+    await expect(peer.getByRole("dialog", { name: /Shared find:.*Black/ })).toBeVisible();
+    await peer.keyboard.press("Escape");
+    await expect(launcher).toBeFocused();
+    await expect(launcher).toHaveAccessibleName("Our finds");
+    await bagCount(peer, 0);
+  } finally {
+    await context.close();
+  }
+});
+
 test("reduced motion, offline status, rejected clipboard and zero results", async ({
   page,
   context,
@@ -115,7 +144,7 @@ test("reduced motion, offline status, rejected clipboard and zero results", asyn
     }),
   );
   await room(page);
-  await page.getByRole("button", { name: "Around the room" }).click();
+  await page.getByRole("button", { name: "Our finds" }).click();
   const drawer = page.locator("#finds-drawer");
   expect(
     await drawer.evaluate((node) => getComputedStyle(node).transitionDuration),
@@ -183,8 +212,9 @@ test("exact saved find, stable browsing, one connection and shared haul", async 
     });
     await search.fill("headphones");
     await page.getByRole("button", { name: "View Over-Ear Headphones" }).click();
-    const variant = page.getByRole("combobox", { name: "Choose a variant" });
-    await variant.selectOption({ label: "Black" });
+    const variant = page.getByRole("button", { name: "Black", exact: true });
+    await variant.click();
+    await expect(variant).toHaveAttribute("aria-pressed", "true");
     await variant.focus();
     const y = await page.evaluate(() => scrollY);
 
@@ -195,21 +225,21 @@ test("exact saved find, stable browsing, one connection and shared haul", async 
     await maya.getByRole("button", { name: "Share find" }).click();
     await maya.getByRole("button", { name: /Back to the collection/ }).click();
     await maya.getByRole("button", { name: "View Backpack" }).click();
-    await expect(page.getByText("Maya shared a find.")).toBeVisible();
-    await expect(page.locator("#open-finds")).toHaveAccessibleName("Around the room, 1 unseen");
+    await expect(page.locator(".find-notice")).toContainText("Maya shared Wristwatch");
+    await expect(page.locator("#open-finds")).toHaveAccessibleName("Our finds, 1 new");
     await expect(variant).toBeFocused();
     expect(await page.evaluate(() => scrollY)).toBe(y);
     await expect(
       page.getByRole("button", { name: "Shared bag, 0 items" }),
     ).toBeVisible();
-    await expect(variant.locator("option:checked")).toHaveText("Black");
+    await expect(variant).toHaveAttribute("aria-pressed", "true");
     await page.getByRole("button", { name: /Back to the collection/ }).click();
     await expect(search).toHaveValue("headphones");
     await expect(
       page.getByRole("button", { name: "View Over-Ear Headphones" }),
     ).toBeFocused();
 
-    await page.getByRole("button", { name: /Around the room/ }).click();
+    await page.getByRole("button", { name: /Our finds/ }).click();
     const drawer = page.getByRole("dialog", { name: "Around the room" });
     await drawer
       .getByRole("button", { name: "Comment on Wristwatch · Tan" })
@@ -270,7 +300,7 @@ test("short drawer, failed product photos and 200% reflow", async ({
   // A 720 CSS-pixel viewport exercises the reflow space available at 200% on 1440.
   await page.setViewportSize({ width: 720, height: 450 });
   expect((await measure()).overflow).toBe(false);
-  const opener = page.getByRole("button", { name: "Around the room" });
+  const opener = page.getByRole("button", { name: "Our finds" });
   await opener.click();
   const drawer = page.getByRole("dialog", { name: "Around the room" });
   const close = drawer.getByRole("button", { name: "Close room panel" });
@@ -312,7 +342,7 @@ test("native 200% Chrome zoom keeps the room and drawer usable", async () => {
         overflow: document.documentElement.scrollWidth > innerWidth,
       })),
     ).toEqual({ width: 720, dpr: 2, overflow: false });
-    const opener = page.getByRole("button", { name: "Around the room" });
+    const opener = page.getByRole("button", { name: "Our finds" });
     await opener.focus();
     await page.keyboard.press("Enter");
     await expect(
@@ -496,7 +526,7 @@ test("three shoppers converge on exact finds across repeats, refresh, and explic
   const pages = [page, maya, priya];
   const panel = (shopper) => shopper.getByRole("dialog", { name: "Around the room" });
   const cards = (shopper) => panel(shopper).locator("[data-find]");
-  const variant = (shopper) => shopper.getByRole("combobox", { name: "Choose a variant" });
+  const black = (shopper) => shopper.getByRole("button", { name: "Black", exact: true });
   const headphones = (shopper) => shopper.getByRole("button", { name: "View Over-Ear Headphones" });
   try {
     for (const shopper of pages) await shopper.setViewportSize({ width: 1440, height: 900 });
@@ -515,18 +545,18 @@ test("three shoppers converge on exact finds across repeats, refresh, and explic
     await query.focus();
     const y = await page.evaluate(() => scrollY);
     await Promise.all([headphones(maya).click(), headphones(priya).click()]);
-    await variant(priya).selectOption({ label: "Black" });
+    await black(priya).click();
     const share = (shopper) => shopper.getByRole("button", { name: "Share find" }).click();
     await Promise.all([share(maya), share(priya)]);
-    await expect(page.locator("#open-finds")).toHaveAccessibleName("Around the room, 2 unseen");
+    await expect(page.locator("#open-finds")).toHaveAccessibleName("Our finds, 2 new");
     await expect(query).toBeFocused();
     expect(await page.evaluate(() => scrollY)).toBe(y);
     await expect(page.locator("#open-bag")).toHaveAccessibleName("Shared bag, 0 items");
-    await expect(page.locator(".find-live-notice span")).toBeHidden({ timeout: 4500 });
-    await variant(priya).selectOption({ label: "Stone" });
+    await expect(page.locator(".find-notice")).toBeHidden({ timeout: 10000 });
+    await priya.getByRole("button", { name: "Stone", exact: true }).click();
     await share(priya);
-    await expect(page.locator(".find-live-notice span")).toBeHidden();
-    await expect(page.locator("#open-finds")).toHaveAccessibleName("Around the room, 2 unseen");
+    await expect(page.locator(".find-notice")).toBeHidden();
+    await expect(page.locator("#open-finds")).toHaveAccessibleName("Our finds, 2 new");
     for (const shopper of pages) await shopper.locator("#open-finds").click();
     const ids = (shopper) => cards(shopper).evaluateAll((nodes) =>
       nodes.map((node) => node.dataset.findVariant));
@@ -550,13 +580,13 @@ test("three shoppers converge on exact finds across repeats, refresh, and explic
     }
     await page.reload();
     await expect(page.getByText("Connected", { exact: true })).toBeVisible();
-    await expect(page.locator(".find-live-notice span")).toBeHidden();
+    await expect(page.locator(".find-notice")).toBeHidden();
     await page.locator("#open-finds").click();
     await expect(cards(page)).toHaveCount(2);
     expect(await ids(page)).toEqual(order);
     await cards(page).filter({ hasText: "Black" }).getByRole("button", { name: "View product" }).click();
-    await expect(variant(page).locator("option:checked")).toHaveText("Black");
-    await expect(variant(maya).locator("option:checked")).toHaveText("Stone");
+    await expect(black(page)).toHaveAttribute("aria-pressed", "true");
+    await expect(maya.getByRole("button", { name: "Stone", exact: true })).toHaveAttribute("aria-pressed", "true");
     await page.getByRole("button", { name: "Add to bag" }).click();
     for (const shopper of pages)
       await expect(shopper.locator("#open-bag")).toHaveAccessibleName("Shared bag, 1 item");
@@ -657,7 +687,7 @@ test("quick add shares and adds the exact headphone variant with its photo", asy
       await page.screenshot({ path: process.env.COSHOP_EVIDENCE + "/quick-add.png" });
     }
     await dialog.getByRole("button", { name: "Share find" }).click();
-    await expect(dialog.getByText("Shared in Our finds.")).toBeVisible();
+    await expect(dialog.getByText("Shared to Our finds.")).toBeVisible();
     await peer.locator("#open-finds").click();
     const black = peer.locator('[data-find-variant="audio-1"]');
     await expect(black).toContainText("Black · CAD 149.00");
@@ -691,9 +721,9 @@ test("quick add shares and adds the exact headphone variant with its photo", asy
     }
     await tile.click();
     const photo = page.locator(".detail-media img");
-    await page.locator("#product-variant").selectOption("audio-1");
+    await page.getByRole("button", { name: "Black", exact: true }).click();
     await expect(photo).toHaveAttribute("src", "/assets/catalog-audio-1.webp");
-    await page.locator("#product-variant").selectOption("audio-0");
+    await page.getByRole("button", { name: "Stone", exact: true }).click();
     await expect(photo).toHaveAttribute("src", "/assets/catalog-audio.webp");
     await page.getByRole("button", { name: /Back to the collection/ }).click();
     await page.getByRole("button", { name: "Everything" }).click();
@@ -725,7 +755,8 @@ test("product gallery stays fitted and sharing uses the canonical variant photo"
     const rail = page.getByRole("group", { name: "Product photos" });
     const buttons = rail.getByRole("button");
     const photo = page.locator(".detail-media img");
-    const variant = page.locator("#product-variant");
+    const stone = page.getByRole("button", { name: "Stone", exact: true });
+    const black = page.getByRole("button", { name: "Black", exact: true });
     await expect(buttons).toHaveCount(3);
     await expect(rail).toHaveCSS("flex-direction", "column");
     const frame = await page.locator(".detail-media").boundingBox();
@@ -736,10 +767,12 @@ test("product gallery stays fitted and sharing uses the canonical variant photo"
     await buttons.nth(2).press("Space");
     await expect(buttons.nth(2)).toBeFocused();
     await expect(photo).toHaveAttribute("src", "/assets/catalog-audio-detail.webp");
-    await expect(variant).toHaveValue("audio-0");
+    await expect(stone).toHaveAttribute("aria-pressed", "true");
     expect(await page.locator(".detail-media").boundingBox()).toEqual(frame);
     expect(await page.evaluate(() => scrollY)).toBe(scroll);
-    await variant.selectOption("audio-1");
+    await black.press("Space");
+    await expect(black).toHaveAttribute("aria-pressed", "true");
+    expect(await page.evaluate(() => scrollY)).toBe(scroll);
     await expect(buttons.first()).toHaveAttribute("aria-pressed", "true");
     await expect(photo).toHaveAttribute("src", "/assets/catalog-audio-1.webp");
     await expect(buttons.nth(2).locator("img")).toHaveAttribute("src", "/assets/catalog-audio-1-detail.webp");
@@ -818,4 +851,431 @@ test("desktop Back label aligns with the gallery and single-photo fallback", asy
   await page.setViewportSize({ width: 360, height: 900 });
   await expect(back).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(360);
+});
+
+const uxShots = process.env.COSHOP_UX_SHOTS;
+const shot = (page, name) =>
+  uxShots ? page.screenshot({ path: join(uxShots, name + ".png") }) : null;
+
+async function joinRoom(page, shopper, name) {
+  await page.getByRole("button", { name: "Invite", exact: true }).click();
+  const link = await page.getByRole("textbox", { name: "Invitation link" }).inputValue();
+  await page.keyboard.press("Escape");
+  await shopper.goto(link);
+  await shopper.getByRole("textbox", { name: "Name (required)" }).fill(name);
+  await shopper.getByRole("button", { name: /Join your people/ }).click();
+  await expect(shopper.getByText("Connected", { exact: true })).toBeVisible();
+}
+
+const openHeadphones = (shopper) =>
+  shopper.getByRole("button", { name: "View Over-Ear Headphones" }).click();
+async function reloadToHeadphones(shopper) {
+  await shopper.reload();
+  await expect(shopper.getByText("Connected", { exact: true })).toBeVisible();
+  if (!(await shopper.locator("#product-heading").isVisible())) await openHeadphones(shopper);
+  await expect(shopper.locator("#product-heading")).toHaveText("Over-Ear Headphones");
+}
+const bagCount = (shopper, count) =>
+  expect(shopper.locator("#open-bag")).toHaveAccessibleName(
+    "Shared bag, " + count + (count === 1 ? " item" : " items"),
+  );
+const noOverflow = (shopper) =>
+  expect
+    .poll(() => shopper.evaluate(() => document.documentElement.scrollWidth - innerWidth))
+    .toBeLessThanOrEqual(0);
+
+for (const width of [360, 390, 1280, 1440]) {
+  test(`finds shortcut, in-bag status and picker note for two shoppers at ${width}px`, async ({ page, browser }) => {
+    const context = await browser.newContext();
+    const maya = await context.newPage();
+    try {
+      for (const shopper of [page, maya]) await shopper.setViewportSize({ width, height: 800 });
+      await room(page);
+      await joinRoom(page, maya, "Maya");
+      await page.evaluate(() => scrollTo(0, 700));
+      const presence = page.locator(".react-presence");
+      const height = (await presence.boundingBox()).height;
+      const geometry = () =>
+        page.evaluate(() => ({
+          head: document.querySelector(".react-room-head").offsetHeight,
+          launcher: document.querySelector("#open-finds").offsetHeight,
+          y: scrollY,
+        }));
+      const stable = await geometry();
+      await openHeadphones(maya);
+      await maya.getByRole("button", { name: "Black", exact: true }).click();
+      await maya.getByRole("button", { name: "Share find" }).click();
+      const trigger = page.locator("#open-finds");
+      await expect(trigger).toHaveAccessibleName("Our finds, 1 new");
+      await expect(trigger).toBeInViewport();
+      expect(await geometry()).toEqual(stable);
+      await expect(page.locator("#open-finds .react-count")).toHaveCSS("animation-name", "confirm-count");
+      expect((await presence.boundingBox()).height).toBe(height);
+      await shot(page, `launcher-badge-${width}`);
+      const y = await page.evaluate(() => scrollY);
+      await trigger.focus();
+      await page.keyboard.press("Enter");
+      const panel = page.getByRole("dialog", { name: "Around the room" });
+      const card = panel.locator("[data-find]").filter({ hasText: "Black" });
+      await expect(card).toContainText("Not in bag yet");
+      await expect(trigger).toHaveAccessibleName("Our finds");
+      await page.keyboard.press("Escape");
+      await expect(panel).toBeHidden();
+      await expect(trigger).toBeFocused();
+      await expect(trigger).toBeInViewport();
+      expect(await page.evaluate(() => scrollY)).toBe(y);
+      expect(await geometry()).toEqual(stable);
+      await maya.getByRole("button", { name: "Add to bag" }).click();
+      await bagCount(page, 1);
+      await trigger.click();
+      await expect(card).toContainText("In bag · 1");
+      await page.keyboard.press("Escape");
+      await expect(panel).toBeHidden();
+      await page.locator("#open-bag").click();
+      const line = page.locator("#bag-items .react-bag-line");
+      await expect(line).toContainText("Only Maya can lower or remove this.");
+      await expect(line.getByRole("button", { name: /^Remove/ })).toHaveCount(0);
+      await noOverflow(page);
+      await shot(page, `picker-note-${width}`);
+      await page.keyboard.press("Escape");
+    } finally {
+      await context.close();
+    }
+  });
+}
+
+async function routeRoomSocket(page) {
+  const sockets = new Set();
+  const route = {
+    send: (m) => m,
+    receive: (m) => m,
+    outage: false,
+    drop() {
+      route.outage = true;
+      for (const ws of sockets) ws.close();
+      sockets.clear();
+    },
+  };
+  await page.routeWebSocket(/.*/, (ws) => {
+    if (route.outage) return ws.close();
+    sockets.add(ws);
+    const server = ws.connectToServer();
+    ws.onMessage((message) => {
+      const next = route.send(String(message));
+      if (next != null) server.send(next);
+    });
+    server.onMessage((message) => {
+      const next = route.receive(String(message));
+      if (next != null) ws.send(next);
+    });
+  });
+  return route;
+}
+const pass = (m) => m;
+const interrupted = "Review your bag; an update was interrupted.";
+
+test("reload after an unsent or unacknowledged add shows a cautious review notice once", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 800 });
+  const route = await routeRoomSocket(page);
+  await room(page);
+  await openHeadphones(page);
+  const add = page.getByRole("button", { name: "Add to bag" });
+  const toast = page.locator(".react-toast");
+
+  route.send = (m) => (m.includes('"bag_change"') ? null : m);
+  await add.click();
+  await expect(page.getByRole("button", { name: "Saving…" })).toBeVisible();
+  route.send = pass;
+  await reloadToHeadphones(page);
+  await expect(toast).toHaveText(interrupted);
+  await bagCount(page, 0);
+  await shot(page, "interrupted-unsent-390");
+  await reloadToHeadphones(page);
+  await expect(toast).not.toHaveText(interrupted);
+
+  route.receive = (m) => (m.includes('"command_ack"') && m.includes('"bag"') ? null : m);
+  await page.getByRole("button", { name: "Add to bag" }).click();
+  await bagCount(page, 1);
+  route.receive = pass;
+  await reloadToHeadphones(page);
+  await expect(toast).toHaveText(interrupted);
+  await page.waitForTimeout(3000);
+  await bagCount(page, 1);
+  await page.locator("#open-bag").click();
+  await expect(page.locator("#bag-status")).toHaveText(interrupted);
+});
+
+test("rejected changes and the 99 cap explain themselves; a later success clears stale errors", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 800 });
+  const route = await routeRoomSocket(page);
+  await page.route(/\/haul-demo$/, (request) =>
+    request.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({ code: "TEST_DEMO", message: "Demo recap failed in test." }),
+    }),
+  );
+  await room(page);
+  await openHeadphones(page);
+  route.send = (m) =>
+    m.includes('"bag_change"') ? m.replace(/"variantId":"[^"]+"/, '"variantId":"tampered"') : m;
+  await page.getByRole("button", { name: "Add to bag" }).click();
+  await expect(page.locator(".react-toast")).not.toHaveText("");
+  const rejection = await page.locator(".react-toast").textContent();
+  await bagCount(page, 0);
+  route.send = pass;
+  await page.getByRole("button", { name: "Add to bag" }).click();
+  await bagCount(page, 1);
+  await page.locator("#open-bag").click();
+  const status = page.locator("#bag-status");
+  await expect(status).not.toHaveText(rejection);
+  await page.getByRole("button", { name: "Demo completion · simulated" }).click();
+  await expect(status).toHaveText("Demo recap failed in test.");
+  await page.getByRole("button", { name: /^Increase quantity/ }).click();
+  await expect(status).toHaveText(/^Added Over-Ear Headphones/);
+  await page.keyboard.press("Escape");
+
+  const capped = (m) =>
+    m.replace(/"quantity":\d+/g, '"quantity":99').replace(/"totalQuantity":\d+/g, '"totalQuantity":99');
+  route.receive = (m) => (m.includes('"bag"') ? capped(m) : m);
+  await page.route(/\/session$/, async (request) => {
+    const response = await request.fetch();
+    await request.fulfill({ response, body: capped(await response.text()) });
+  });
+  await page.reload();
+  await expect(page.getByText("Connected", { exact: true })).toBeVisible();
+  await page.locator("#open-bag").click();
+  const increase = page.getByRole("button", { name: /^Increase quantity/ });
+  await expect(increase).toHaveAttribute("aria-disabled", "true");
+  await expect(increase).toHaveAccessibleDescription("Limit 99 per item.");
+  await noOverflow(page);
+  await shot(page, "cap-note-360");
+});
+
+test("reconnect highlights changed bag lines once and reduced motion keeps a static outline", async ({ browser }) => {
+  const options = process.env.COSHOP_UX_VIDEO
+    ? { recordVideo: { dir: process.env.COSHOP_UX_VIDEO, size: { width: 1440, height: 900 } } }
+    : {};
+  const contexts = await Promise.all([browser.newContext(options), browser.newContext()]);
+  const [page, maya] = await Promise.all(contexts.map((context) => context.newPage()));
+  try {
+    for (const shopper of [page, maya]) await shopper.setViewportSize({ width: 1440, height: 900 });
+    await room(page);
+    await joinRoom(page, maya, "Maya");
+    await openHeadphones(page);
+    await openHeadphones(maya);
+    await page.getByRole("button", { name: "Add to bag" }).click();
+    await bagCount(maya, 1);
+    await expect(page.getByRole("button", { name: "Add to bag" })).toBeVisible();
+    const status = page.locator("#bag-status");
+    const changed = page.locator("#bag-items .react-bag-line.line-changed");
+    const reconnectWhile = async (action) => {
+      await page.context().setOffline(true);
+      await expect(page.getByText("Reconnecting…", { exact: true }).first()).toBeVisible();
+      await action();
+      await page.context().setOffline(false);
+      await expect(page.getByText("Connected", { exact: true })).toBeVisible();
+    };
+    await reconnectWhile(async () => {
+      await maya.getByRole("button", { name: "Add to bag" }).click();
+      await bagCount(maya, 2);
+    });
+    await bagCount(page, 2);
+    await page.locator("#open-bag").click();
+    await expect(changed).toHaveCount(1);
+    await expect(changed).toContainText("Updated");
+    await expect(status).toHaveText("Bag refreshed · 1 line changed.");
+    await expect(page.locator("#bag-drawer")).toHaveCSS("opacity", "1");
+    await shot(page, "line-changed-1440");
+    await expect(changed).toHaveCount(0, { timeout: 6000 });
+    await expect(status).toHaveText("");
+    await page.keyboard.press("Escape");
+
+    await reconnectWhile(async () => {});
+    await page.locator("#open-bag").click();
+    await expect(page.locator("#bag-items .react-bag-line")).toHaveCount(1);
+    await page.waitForTimeout(500);
+    await expect(changed).toHaveCount(0);
+    await expect(status).toHaveText("");
+    await page.keyboard.press("Escape");
+
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await reconnectWhile(async () => {
+      await maya.getByRole("button", { name: "Add to bag" }).click();
+      await bagCount(maya, 3);
+    });
+    await page.locator("#open-bag").click();
+    await expect(changed).toHaveCount(1);
+    await expect(changed).toHaveCSS("animation-name", "none");
+    await expect(changed).toHaveCSS("outline-style", "solid");
+    await expect(changed).toContainText("Updated");
+  } finally {
+    await Promise.all(contexts.map((context) => context.close()));
+  }
+});
+
+test("selected gallery photo survives refresh per variant and ignores invalid saved photos", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 800 });
+  await room(page);
+  await openHeadphones(page);
+  const rail = page.getByRole("group", { name: "Product photos" });
+  const thumbs = rail.getByRole("button");
+  await thumbs.nth(1).click();
+  await expect(thumbs.nth(1)).toHaveAttribute("aria-pressed", "true");
+  await reloadToHeadphones(page);
+  await expect(thumbs.nth(1)).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Black", exact: true }).click();
+  await expect(thumbs.nth(0)).toHaveAttribute("aria-pressed", "true");
+  await page.evaluate(() => {
+    for (const key of Object.keys(sessionStorage))
+      if (key.startsWith("coshop:photo:")) sessionStorage.setItem(key, "/assets/missing.webp");
+  });
+  await reloadToHeadphones(page);
+  await page.getByRole("button", { name: "Stone", exact: true }).click();
+  await expect(thumbs.nth(0)).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".detail-media")).not.toContainText("Image unavailable");
+});
+
+test("an own add confirmation does not linger after a peer changes the bag live", async ({ page, browser }) => {
+  const context = await browser.newContext();
+  const maya = await context.newPage();
+  try {
+    for (const shopper of [page, maya]) await shopper.setViewportSize({ width: 1440, height: 900 });
+    await room(page);
+    await joinRoom(page, maya, "Maya");
+    await openHeadphones(page);
+    await openHeadphones(maya);
+    await page.getByRole("button", { name: "Add to bag" }).click();
+    await expect(page.getByRole("button", { name: "Add to bag" })).toBeVisible();
+    await page.locator("#open-bag").click();
+    const status = page.locator("#bag-status");
+    await expect(status).toHaveText(/^Added Over-Ear Headphones/);
+    await maya.getByRole("button", { name: "Add to bag" }).click();
+    await expect(page.locator("#bag-items")).toContainText("2");
+    await bagCount(page, 2);
+    await expect(status).toHaveText("");
+    await expect(page.locator("#bag-items .line-changed")).toHaveCount(0);
+    await page.getByRole("button", { name: /^Increase quantity/ }).click();
+    await expect(status).toHaveText(/^Added Over-Ear Headphones/);
+    await page.context().setOffline(true);
+    await expect(page.getByText("Reconnecting…", { exact: true }).first()).toBeVisible();
+    await page.context().setOffline(false);
+    await expect(page.getByText("Connected", { exact: true })).toBeVisible();
+    await expect(status).toHaveText("");
+    await expect(page.locator("#bag-items .line-changed")).toHaveCount(0);
+  } finally {
+    await context.close();
+  }
+});
+
+test("a failed demo completion survives a peer joining but clears after a real reconnect", async ({ page, browser }) => {
+  const context = await browser.newContext();
+  const maya = await context.newPage();
+  try {
+    await page.setViewportSize({ width: 390, height: 800 });
+    await page.route(/\/haul-demo$/, (request) =>
+      request.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ code: "TEST_DEMO", message: "Demo recap failed in test." }),
+      }),
+    );
+    await room(page);
+    await openHeadphones(page);
+    await page.getByRole("button", { name: "Add to bag" }).click();
+    await bagCount(page, 1);
+    await page.locator("#open-bag").click();
+    const status = page.locator("#bag-status");
+    await page.getByRole("button", { name: "Demo completion · simulated" }).click();
+    await expect(status).toHaveText("Demo recap failed in test.");
+    await page.keyboard.press("Escape");
+    await joinRoom(page, maya, "Maya");
+    await expect(page.locator(".react-presence")).toContainText("Maya");
+    await page.locator("#open-bag").click();
+    await expect(status).toHaveText("Demo recap failed in test.");
+    await page.context().setOffline(true);
+    await expect(status).toHaveText("Reconnecting… Your bag is saved.");
+    await page.context().setOffline(false);
+    await expect(page.getByText("Connected", { exact: true })).toBeVisible();
+    await expect(status).toHaveText("");
+    await bagCount(page, 1);
+    await expect(page.locator("#bag-items .line-changed")).toHaveCount(0);
+  } finally {
+    await context.close();
+  }
+});
+
+test("opening the desktop finds dock right after a small product-page scroll keeps the shopper's position", async ({ page, browser }) => {
+  const context = await browser.newContext();
+  const maya = await context.newPage();
+  try {
+    for (const width of [1440, 1280]) {
+      for (const shopper of [page, maya]) await shopper.setViewportSize({ width, height: 600 });
+      if (width === 1440) {
+        await room(page);
+        await joinRoom(page, maya, "Maya");
+      } else await page.getByRole("button", { name: "← Back to the collection" }).click();
+      await openHeadphones(page);
+      await expect(page.locator("#product-heading")).toBeFocused();
+      const aligned = await page.evaluate(() => scrollY);
+      await page.mouse.move(width / 2, 400);
+      await page.mouse.wheel(0, 9);
+      await expect.poll(() => page.evaluate(() => scrollY)).toBe(aligned + 9);
+      await page.locator("#open-finds").focus();
+      await page.keyboard.press("Enter");
+      await expect(page.getByRole("dialog", { name: "Around the room" })).toBeVisible();
+      expect(await page.evaluate(() => scrollY)).toBe(aligned + 9);
+      await page.keyboard.press("Escape");
+      await expect(page.locator("#open-finds")).toBeFocused();
+      expect(await page.evaluate(() => scrollY)).toBe(aligned + 9);
+    }
+  } finally {
+    await context.close();
+  }
+});
+
+test("a bag change that times out during a long outage asks the shopper to review after reconnect", async ({ page, browser }) => {
+  test.setTimeout(120000);
+  const context = await browser.newContext();
+  const maya = await context.newPage();
+  try {
+    for (const shopper of [page, maya]) await shopper.setViewportSize({ width: 390, height: 800 });
+    const route = await routeRoomSocket(page);
+    await room(page);
+    await joinRoom(page, maya, "Maya");
+    await openHeadphones(page);
+    const toast = page.locator(".react-toast");
+    const outage = async (expected, peerProduct) => {
+      route.drop();
+      await expect(page.getByText("Reconnecting…", { exact: true }).first()).toBeVisible();
+      await expect(page.getByRole("button", { name: "Saving…" })).toBeVisible();
+      await maya.getByRole("button", { name: "Quick add " + peerProduct }).click();
+      await maya.getByRole("dialog").getByRole("button", { name: "Add to bag" }).click();
+      await maya.keyboard.press("Escape");
+      await page.waitForTimeout(16500);
+      route.send = pass;
+      route.receive = pass;
+      route.outage = false;
+      await expect(page.getByText("Connected", { exact: true })).toBeVisible({ timeout: 20000 });
+      await expect(toast).toHaveText(interrupted);
+      await bagCount(page, expected);
+      await page.waitForTimeout(3000);
+      await bagCount(page, expected);
+      await page.locator("#open-bag").click();
+      await expect(page.locator("#bag-status")).toHaveText(interrupted);
+      await page.keyboard.press("Escape");
+    };
+
+    route.send = (m) => (m.includes('"bag_change"') ? null : m);
+    await page.getByRole("button", { name: "Add to bag" }).click();
+    await outage(1, "Backpack");
+    await expect(page.locator("#open-bag")).toHaveAccessibleName("Shared bag, 1 item");
+
+    route.receive = (m) => (m.includes('"command_ack"') && m.includes('"bag"') ? null : m);
+    await page.getByRole("button", { name: "Add to bag" }).click();
+    await bagCount(page, 2);
+    await outage(3, "Reading Chair");
+  } finally {
+    await context.close();
+  }
 });

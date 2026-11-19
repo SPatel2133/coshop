@@ -6,12 +6,13 @@ import findsSchema from "./drizzle/room-object/0004_shared_finds.sql";
 import discussionSchema from "./drizzle/room-object/0005_discussion.sql";
 import storefrontSchema from "./drizzle/room-object/0006_storefront.sql";
 import haulSchema from "./drizzle/room-object/0007_haul.sql";
+import checkoutResumeSchema from "./drizzle/room-object/0008_checkout_resume.sql";
 import { configuration, RoomError } from "./server/config.js";
 import { verifyInvite, tokenHash, sameOrigin } from "./server/security.js";
 import { objectStore, migrate } from "./server/storage.js";
 import { Rooms, roomHttp, json } from "./server/rooms.js";
 import { Storefront } from "./server/storefront.js";
-import { readPaidWebhook } from "./server/order-webhook.js";
+import { logWebhook, readPaidWebhook } from "./server/order-webhook.js";
 import { catalog } from "./catalog.mjs";
 import { discussionFor, isDiscussion } from "./server/discussion.js";
 import { rateKey, consume } from "./server/abuse.js";
@@ -40,6 +41,7 @@ export class RoomObject extends DurableObject {
       migrate(this.store, discussionSchema, 5);
       migrate(this.store, storefrontSchema, 6);
       migrate(this.store, haulSchema, 7);
+      migrate(this.store, checkoutResumeSchema, 8);
     });
     this.rooms = new Rooms(
       this.store,
@@ -113,12 +115,15 @@ export class RoomObject extends DurableObject {
       if (!id) throw new RoomError("INVALID_LINK", "Invalid invite.", 404);
       if (url.pathname === "/internal/paid") {
         const order = await request.json();
-        if (order.room !== id) return json({ received: true });
-        if (await this.rooms.haul.paid(order)) {
+        if (order.room !== id)
+          return json({ received: true, outcome: "unknown_attempt" });
+        const outcome = await this.rooms.haul.paid(order);
+        if (outcome === "room_expired") await this.erase();
+        if (outcome === "recorded") {
           this.broadcast(id);
           await this.schedule(id);
         }
-        return json({ received: true });
+        return json({ received: true, outcome });
       }
       if (url.pathname === "/socket") {
         this.rooms.require(id);
@@ -348,8 +353,11 @@ export default {
       if (url.pathname === "/api/shopify/orders-paid") {
         sameOrigin(request);
         const config = configuration(env);
-        const order = await readPaidWebhook(request, config);
-        if (!order) return json({ received: true });
+        const { order, outcome } = await readPaidWebhook(request, config);
+        if (!order) {
+          logWebhook(request, outcome);
+          return json({ received: true, outcome });
+        }
         const response = await env.ROOMS.get(
           env.ROOMS.idFromName(order.room),
         ).fetch(
@@ -359,7 +367,12 @@ export default {
             body: JSON.stringify(order),
           }),
         );
-        return response.status === 410 ? json({ received: true }) : response;
+        if (response.status === 410) {
+          logWebhook(request, "room_expired");
+          return json({ received: true, outcome: "room_expired" });
+        }
+        if (response.ok) logWebhook(request, (await response.clone().json()).outcome);
+        return response;
       }
       const roomPath = url.pathname === "/api/rooms";
       const match = url.pathname.match(

@@ -179,7 +179,7 @@ function addVariant(state, store, product, variant) {
   });
 }
 
-export function QuickAdd({ product, state, store, close }) {
+export function QuickAdd({ product, state, store, close, openFinds }) {
   const [variantId, setVariantId] = useState(product.variants[0]?.id);
   const [action, setAction] = useState(null);
   const variant = product.variants.find(({ id }) => id === variantId);
@@ -228,11 +228,16 @@ export function QuickAdd({ product, state, store, close }) {
               </div>
               <p className="fine" role="status">
                 {action === "bag" ? state.bag.feedback :
-                  shared ? "Shared in Our finds." :
+                  shared ? "Shared to Our finds." :
                   !state.online ? "Reconnect to share or add to the bag." :
                   state.shareWait ? "Ready to share again in " + state.shareWait + "s." :
                   action === "share" ? state.toast : ""}
               </p>
+              {shared && (
+                <button type="button" className="quiet" onClick={() => dismiss(openFinds)}>
+                  Open Our finds
+                </button>
+              )}
             </>
           ) : <p>No variants available.</p>}
         </div>
@@ -240,6 +245,12 @@ export function QuickAdd({ product, state, store, close }) {
     </Modal>
   );
 }
+
+// The sample catalog does not send option names or verified swatch values.
+const sampleColorProducts = new Set([
+  "bag", "audio", "camera", "cap", "sunglasses", "speaker", "earbuds",
+  "lamp", "plant", "sofa", "pillow", "mug",
+]);
 
 export function Product({
   state,
@@ -249,6 +260,7 @@ export function Product({
   back,
   select,
   peek,
+  openFinds,
 }) {
   const section = useRef(null);
   useLayoutEffect(() => {
@@ -303,33 +315,55 @@ export function Product({
         </div>
       )}
       <div id="product-detail" className="react-product-detail">
-        <ProductGallery product={product} variant={variant} />
+        <ProductGallery
+          product={product}
+          variant={variant}
+          scope={state.room.id + ":" + state.me}
+        />
         <div className="product-copy">
           <h2 id="product-heading" tabIndex={-1}>
             {product.name || "Untitled product"}
           </h2>
           <p className="detail-price">{money(variant)}</p>
-          <p>{product.description}</p>
-          <label htmlFor="product-variant">Choose a variant</label>
-          <select
-            id="product-variant"
-            value={variant.id}
-            onChange={(event) => select(event.target.value)}
-          >
-            {product.variants.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.title}
-                {item.available ? "" : " · unavailable"}
-              </option>
-            ))}
-          </select>
-          <p className="fine">
-            {!variant.available
-              ? "This variant is unavailable."
-              : state.room.catalogMode === "shopify"
-                ? "Available on Shopify"
-                : "Sample product · preview only"}
-          </p>
+          <p className="detail-description">{product.description}</p>
+          <div className="detail-variants">
+            {state.room.catalogMode === "sample" && sampleColorProducts.has(product.id) ? (
+              <fieldset className="color-options">
+                <legend>Color: {variant.title}</legend>
+                <div className="color-option-list">
+                  {product.variants.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className="secondary"
+                      aria-pressed={item.id === variant.id}
+                      disabled={!item.available}
+                      onClick={() => select(item.id)}
+                    >
+                      {item.title}{item.available ? "" : " · unavailable"}
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
+            ) : (
+              <>
+                <label htmlFor="product-variant">Choose a variant</label>
+                <select
+                  id="product-variant"
+                  value={variant.id}
+                  onChange={(event) => select(event.target.value)}
+                >
+                  {product.variants.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.title}
+                      {item.available ? "" : " · unavailable"}
+                    </option>
+                  ))}
+                </select>
+              </>
+            )}
+          </div>
+          {!variant.available && <p className="fine">This variant is unavailable.</p>}
           <div className="react-product-actions">
             <button
               className="primary"
@@ -357,15 +391,19 @@ export function Product({
             {!state.online
               ? "Reconnect to share. You can keep browsing."
               : shared
-                ? "Shared " +
-                  product.name +
-                  " · " +
-                  variant.title +
-                  " in Our finds."
+                ? "Shared to Our finds."
                 : state.shareWait
                   ? "Ready to share again in " + state.shareWait + "s."
-                  : "Sharing saves a find without adding it to the bag."}
+                  : "Sharing sends this exact variant to Our finds. It doesn’t add it to the bag."}
           </p>
+          {shared && state.online && (
+            <button type="button" className="quiet" onClick={(event) => openFinds(event.currentTarget)}>
+              Open Our finds
+            </button>
+          )}
+          {state.room.catalogMode === "sample" && (
+            <p className="fine">Sample catalog · checkout unavailable</p>
+          )}
         </div>
       </div>
     </section>

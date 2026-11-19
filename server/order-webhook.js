@@ -3,25 +3,38 @@ import { RoomError } from "./config.js";
 import { haulAttribute } from "./haul.js";
 
 const limit = 1024 * 1024;
-const denied = () =>
-  new RoomError("WEBHOOK_SIGNATURE", "Webhook signature rejected.", 401);
+// Rejections are logged with a reason; the response stays generic.
+const denied = (request, reason) => {
+  logWebhook(request, "rejected_" + reason);
+  return new RoomError("WEBHOOK_SIGNATURE", "Webhook signature rejected.", 401);
+};
 const gid = /^gid:\/\/shopify\/Order\/\d{1,25}$/;
 const marker = /^([a-f0-9-]{36})\.([a-f0-9-]{36})$/;
 
+// Resolves to { order, outcome }; order is null when the event is ignored.
+export function logWebhook(request, outcome) {
+  const id = request.headers.get("x-shopify-webhook-id") ?? "";
+  console.log(
+    JSON.stringify({
+      event: "coshop.orders_paid",
+      outcome,
+      webhookId: /^[A-Za-z0-9-]{1,64}$/.test(id) ? id : null,
+    }),
+  );
+}
 export async function readPaidWebhook(request, config) {
   const { webhookSecret, domain } = config.shopify;
   if (!webhookSecret || !domain || request.method !== "POST")
     throw new RoomError("NOT_FOUND", "Page not found.", 404);
   const shop = request.headers.get("x-shopify-shop-domain");
   const signature = request.headers.get("x-shopify-hmac-sha256") ?? "";
-  if (
-    shop !== normalizeDomain(domain) ||
-    request.headers.get("x-shopify-topic") !== "orders/paid" ||
-    !/^[A-Za-z0-9+/]{43}=$/.test(signature)
-  )
-    throw denied();
+  if (shop !== normalizeDomain(domain)) throw denied(request, "shop");
+  if (request.headers.get("x-shopify-topic") !== "orders/paid")
+    throw denied(request, "topic");
+  if (!/^[A-Za-z0-9+/]{43}=$/.test(signature))
+    throw denied(request, "signature");
   const reader = request.body?.getReader();
-  if (!reader) throw denied();
+  if (!reader) throw denied(request, "body");
   const chunks = [];
   let offset = 0;
   try {
@@ -30,6 +43,7 @@ export async function readPaidWebhook(request, config) {
       if (done) break;
       if (offset + value.length > limit) {
         await reader.cancel();
+        logWebhook(request, "rejected_size");
         throw new RoomError(
           "BODY_TOO_LARGE",
           "That request is too large.",
@@ -63,14 +77,15 @@ export async function readPaidWebhook(request, config) {
       raw,
     ))
   )
-    throw denied();
+    throw denied(request, "signature");
   let order;
   try {
     order = JSON.parse(new TextDecoder().decode(raw));
   } catch {
     throw new RoomError("INVALID_ORDER", "Invalid order data.");
   }
-  if (order?.financial_status !== "paid") return null;
+  if (order?.financial_status !== "paid")
+    return { order: null, outcome: "not_paid" };
   const tag =
     Array.isArray(order.note_attributes) &&
     order.note_attributes.find((entry) => entry?.name === haulAttribute);
@@ -85,7 +100,7 @@ export async function readPaidWebhook(request, config) {
     !order.line_items.length ||
     order.line_items.length > 250
   )
-    return null;
+    return { order: null, outcome: "unattributed" };
   try {
     const total = order.total_price_set?.presentment_money ?? {
       amount: order.total_price,
@@ -114,14 +129,19 @@ export async function readPaidWebhook(request, config) {
             : "",
       };
     });
+    const paidAt = Date.parse(order.processed_at ?? order.created_at ?? "");
     return {
-      room: match[1],
-      attempt: match[2],
-      shop,
-      cartToken: order.cart_token,
-      orderId: order.admin_graphql_api_id,
-      totals,
-      lines,
+      outcome: "verified",
+      order: {
+        room: match[1],
+        attempt: match[2],
+        shop,
+        cartToken: order.cart_token,
+        orderId: order.admin_graphql_api_id,
+        paidAt: Number.isFinite(paidAt) ? paidAt : null,
+        totals,
+        lines,
+      },
     };
   } catch {
     throw new RoomError("INVALID_ORDER", "Invalid order details.");
