@@ -1104,6 +1104,14 @@ test("an own add confirmation does not linger after a peer changes the bag live"
     await bagCount(page, 2);
     await expect(status).toHaveText("");
     await expect(page.locator("#bag-items .line-changed")).toHaveCount(0);
+    await page.getByRole("button", { name: /^Increase quantity/ }).click();
+    await expect(status).toHaveText(/^Added Over-Ear Headphones/);
+    await page.context().setOffline(true);
+    await expect(page.getByText("Reconnecting…", { exact: true }).first()).toBeVisible();
+    await page.context().setOffline(false);
+    await expect(page.getByText("Connected", { exact: true })).toBeVisible();
+    await expect(status).toHaveText("");
+    await expect(page.locator("#bag-items .line-changed")).toHaveCount(0);
   } finally {
     await context.close();
   }

@@ -181,6 +181,10 @@ test("bag highlights only changed lines on resync and flags an interrupted chang
     send.resolve({ bag: { revision: 4, pricedAt: 1, items: [line("a", 5)] } });
     await new Promise((resolve) => setTimeout(resolve));
     assert.equal(view.changed, null, "an own acknowledgement does not highlight");
+    assert.match(view.feedback, /^Added Cap/);
+    model.snapshot(room(4, [line("a", 5)]), "me");
+    assert.equal(view.feedback, "", "an unchanged resync clears a stale confirmation");
+    assert.equal(view.changed, null, "an unchanged resync does not highlight");
   } finally {
     if (previousStorage) Object.defineProperty(globalThis, "sessionStorage", previousStorage);
     else delete globalThis.sessionStorage;

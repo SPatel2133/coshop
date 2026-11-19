@@ -44,6 +44,8 @@ class BagModel {
       } catch {}
       if (this.feedback) this.error(this.feedback);
     }
+    // Snapshots also follow membership and lease changes, so only bag-action feedback is cleared here.
+    else if (!this.pending.size && this.feedback !== INTERRUPTED) this.feedback = "";
     this.checkoutEnabled = room.checkoutEnabled;
     this.checkout = room.checkout;
     this.merge(room.bag, null, true);
