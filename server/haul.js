@@ -21,14 +21,40 @@ export class Haul {
       return find ? [{ name: find.name, variant: find.variant, count }] : [];
     });
   }
-  saveCheckout(room, id, shop, cartToken, items) {
+  attempt(room, id) {
+    return this.store.all(
+      "SELECT 1 FROM haul_checkouts WHERE room_id=? AND id=?",
+      room,
+      id,
+    ).length;
+  }
+  // Attempts are kept until room expiry. outcome: pending (cartCreate in
+  // flight), opened (handed to the shopper), unconfirmed (no usable Shopify
+  // response), rejected (Shopify answered but CoShop refused the cart),
+  // withheld (lease ended first) or paid. cart_token is '' until bound.
+  saveCheckout(room, id, shop, items) {
     this.store.run(
-      "INSERT INTO haul_checkouts(room_id,id,shop,cart_token,snapshot) VALUES(?,?,?,?,?)",
+      "INSERT INTO haul_checkouts(room_id,id,shop,cart_token,snapshot) VALUES(?,?,?,'',?)",
       room,
       id,
       shop,
-      cartToken,
       JSON.stringify({ items, highlights: this.highlights(room) }),
+    );
+  }
+  bindCart(room, id, cartHash) {
+    this.store.run(
+      "UPDATE haul_checkouts SET cart_token=? WHERE room_id=? AND id=? AND cart_token=''",
+      cartHash,
+      room,
+      id,
+    );
+  }
+  settle(room, id, outcome) {
+    this.store.run(
+      "UPDATE haul_checkouts SET outcome=? WHERE room_id=? AND id=? AND outcome='pending'",
+      outcome,
+      room,
+      id,
     );
   }
   latest(room) {
@@ -90,33 +116,41 @@ export class Haul {
       });
     });
   }
+  // Returns a privacy-safe outcome code; only "recorded" changes the room.
   async paid(order) {
-    const { room, attempt, shop, cartToken, orderId, totals, lines } = order;
+    const { room, attempt, shop, cartToken, orderId, totals, lines, paidAt } =
+      order;
     const tokenHash = await digest(cartToken);
+    // Orders are deduplicated exactly by a hash of shop and order id.
+    const eventKey = "paid:" + (await digest(shop + ":" + orderId));
+    const legacyKey = "paid:" + shop + ":" + orderId;
     try {
       this.rooms.require(room);
     } catch (error) {
-      if (error.code === "ROOM_EXPIRED") return false;
+      if (error.code === "ROOM_EXPIRED") return "room_expired";
       throw error;
     }
     return this.store.transaction(() => {
-      const checkout = this.store.all(
-        "SELECT * FROM haul_checkouts WHERE room_id=? AND id=? AND shop=? AND cart_token=?",
-        room,
-        attempt,
-        shop,
-        tokenHash,
-      )[0];
-      const eventKey = "paid:" + shop + ":" + orderId;
       if (
-        !checkout ||
         this.store.all(
-          "SELECT 1 FROM haul_recaps WHERE room_id=? AND event_key=?",
+          "SELECT 1 FROM haul_recaps WHERE room_id=? AND event_key IN (?,?)",
           room,
           eventKey,
+          legacyKey,
         ).length
       )
-        return false;
+        return "duplicate";
+      const checkout = this.store.all(
+        "SELECT * FROM haul_checkouts WHERE room_id=? AND id=?",
+        room,
+        attempt,
+      )[0];
+      if (!checkout) return "unknown_attempt";
+      if (!checkout.cart_token) return "attempt_unbound";
+      if (checkout.shop !== shop || checkout.cart_token !== tokenHash)
+        return "cart_mismatch";
+      if (checkout.outcome === "paid") return "attempt_already_paid";
+      if (checkout.outcome !== "opened") return "attempt_not_opened";
       const { items: prepared, highlights } = JSON.parse(checkout.snapshot);
       const byVariant = new Map(prepared.map((item) => [item.variantId, item]));
       const items = lines.map((line) => {
@@ -134,13 +168,14 @@ export class Haul {
         id: "paid:" + attempt,
         mode: "paid",
         createdAt: this.clock(),
+        paidAt,
         items,
         totals,
         highlights,
         totalQuantity: items.reduce((count, line) => count + line.quantity, 0),
       });
       this.store.run(
-        "DELETE FROM haul_checkouts WHERE room_id=? AND id=?",
+        "UPDATE haul_checkouts SET outcome='paid' WHERE room_id=? AND id=?",
         room,
         attempt,
       );
@@ -149,7 +184,7 @@ export class Haul {
         room,
         attempt,
       );
-      return true;
+      return "recorded";
     });
   }
 }

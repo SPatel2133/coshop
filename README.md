@@ -2,14 +2,14 @@
 
 CoShop lets friends shop the same catalog while staying on their own product pages. When you share a find, everyone sees the exact size or color you picked in **Our finds**. The **Shared bag** holds the items the group decides to buy.
 
-**[Try CoShop live](https://trycoshop.vercel.app/)** · Sample catalog · No sign-in or installation
+**[Try the public demo](https://trycoshop.vercel.app/)** · Sample catalog · No sign-in or installation. The hosted build predates the release candidate’s **Our finds** launcher and clickable share alerts. Run this branch locally to try those updates.
 
 ## Try it in two windows
 
 | Do this | Look for this |
 | --- | --- |
 | Start a **Sample catalog** room. Copy its invite and open it in a private window or on a second device. | Both shoppers appear in the room and can browse independently. |
-| In the first window, select **Black** on **Over-Ear Headphones** and click **Share find**. | In the other window, open **Around the room → Our finds**. Black appears with its own photo and **CAD 149.00**. Both bags stay at zero. |
+| In the first window, use **Quick add** on **Over-Ear Headphones**, select **Black**, and click **Share find**. | In the second window, choose **View find** on the alert or open **Our finds** from the toolbar. On the older hosted build, use **Around the room** instead. Both bags stay at zero. |
 | Click **Add to bag** in the first window. | Both bag counts become **1**. Refresh the second window to see the find and bag persist. |
 
 ![CoShop product gallery and the shared Black headphone find with an empty bag](docs/images/coshop-demo.jpg)
@@ -22,7 +22,7 @@ CoShop lets friends shop the same catalog while staying on their own product pag
 
 ## What the demo includes
 
-The public demo uses a **sample catalog** with reference prices. **Demo completion · simulated** in the bag shows the Haul recap without placing an order or taking payment. The optional Shopify integration loads live products through the Storefront API, validates prices and availability, and hands off to hosted checkout. Checkout requires a configured store. A paid recap requires a verified Shopify order webhook. Live checkout was not verified on the public release.
+The public demo uses sample products and reference prices. **Demo completion · simulated** shows a Haul recap without payment. The optional Shopify path uses the Storefront API for catalog data, price and availability checks, and cart creation. [Shopify fixture tests](tests/phase5-attribution.test.mjs) exercise cart and signed webhook handling with synthetic data. Live paid-order attribution still needs a supervised Shopify development-store test.
 
 ## Run locally
 
@@ -52,4 +52,10 @@ See the [deployment runbook](docs/portfolio-preview.md) for preview isolation, o
 - [Measure local share convergence and inspect the raw trials](docs/evidence/benchmark.md).
 - [Trace a rate-limit response from symptom to recovery](docs/evidence/diagnosis.md).
 
-Sharing and adding are separate server commands. That costs an explicit add step and lets shoppers discuss an exact variant without changing anyone’s bag quantity.
+Sharing records an exact variant in the room. An explicit add changes the bag. The [room command handling](server/rooms.js), [sharing implementation](server/hold-ups.js), and [browser regressions](tests/design.spec.js) show how the two actions stay separate.
+
+## Reconnection and release checks
+
+On reconnect, the client takes the authoritative room snapshot. If an in-flight bag update timed out offline, CoShop asks the shopper to review the bag because the server may already have accepted it. The client does not replay that update.
+
+The draft PR links the GitHub Actions run for its exact candidate commit. See the [branch’s CI history](https://github.com/SPatel2133/coshop/actions?query=branch%3Areview%2Fcoshop-release-candidate), the [architecture notes](docs/launch/architecture.md), and the [supervised Shopify test procedure](docs/shopify-live-verification.md).

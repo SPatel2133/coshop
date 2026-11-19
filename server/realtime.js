@@ -1,12 +1,18 @@
 import { RoomError } from "./config.js";
-export const errorMessage = (error) => ({
-  type: "error",
-  code: error.code || "SERVER_ERROR",
-  message: error.code
-    ? error.message
-    : "Something went wrong. Your room is safe; please retry.",
-  retryAfter: error.retryAfter,
-});
+// Only RoomError details are public; anything else is an internal failure.
+export const errorMessage = (error) =>
+  error instanceof RoomError
+    ? {
+        type: "error",
+        code: error.code,
+        message: error.message,
+        retryAfter: error.retryAfter,
+      }
+    : {
+        type: "error",
+        code: "SERVER_ERROR",
+        message: "Something went wrong. Your room is safe; please retry.",
+      };
 export function parseMessage(raw) {
   if (typeof raw !== "string" || raw.length > 2048)
     throw new RoomError("INVALID_MESSAGE", "Invalid connection message.");

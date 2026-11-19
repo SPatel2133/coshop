@@ -117,3 +117,141 @@ test("React bag model separates pending rows from accepted quantity and ignores 
   assert.equal(view.cue, cue);
   assert.equal(view.items[0].quantity, 1);
 });
+
+test("bag highlights only changed lines on resync and flags an interrupted change", async () => {
+  const store = new Map();
+  const previousStorage = Object.getOwnPropertyDescriptor(globalThis, "sessionStorage");
+  Object.defineProperty(globalThis, "sessionStorage", {
+    configurable: true,
+    value: {
+      getItem: (key) => (store.has(key) ? store.get(key) : null),
+      setItem: (key, value) => store.set(key, String(value)),
+      removeItem: (key) => store.delete(key),
+    },
+  });
+  try {
+    const line = (variantId, quantity, cents = 1000) => ({
+      variantId, quantity, cents, available: true, pickedBy: { id: "me" },
+    });
+    const room = (revision, items) => ({
+      id: "room", checkoutEnabled: false, checkout: null,
+      bag: { revision, pricedAt: 1, items },
+    });
+    let view;
+    const toasts = [];
+    let send;
+    const model = createBag(
+      () => new Promise((resolve, reject) => (send = { resolve, reject })),
+      null,
+      (next) => (view = next),
+      (message) => toasts.push(message),
+    );
+    model.highlightMs = 20;
+    model.setConnected(true);
+    model.snapshot(room(1, [line("a", 3), line("b", 1)]), "me");
+    assert.equal(view.changed, null);
+
+    model.snapshot(room(1, [line("a", 3), line("b", 1)]), "me");
+    assert.equal(view.changed, null, "an unchanged reconnect does not highlight");
+
+    model.snapshot(room(2, [line("a", 4), line("b", 1, 1200)]), "me");
+    assert.deepEqual([...view.changed.variantIds].sort(), ["a", "b"]);
+    assert.equal(view.feedback, "Bag refreshed · 2 lines changed.");
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    assert.equal(view.changed, null, "the highlight clears");
+
+    model.snapshot(room(3, [line("a", 4)]), "me");
+    assert.equal(view.changed, null);
+    assert.equal(view.feedback, "Bag refreshed · 1 removed.");
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    assert.equal(view.feedback, "", "a removal-only refresh message clears too");
+
+    model.change("add", { ...line("a", 4), name: "Cap", variant: "Black" });
+    const key = "coshop:bag-pending:room:me";
+    const marker = JSON.parse(store.get(key));
+    assert.deepEqual(Object.keys(marker), ["a"]);
+    assert.match(marker.a, /^[0-9a-f-]{36}$/);
+    assert.doesNotMatch(store.get(key), /Cap|Black|token|invite/);
+
+    const reloaded = createBag(() => new Promise(() => {}), null, (next) => (view = next), (m) => toasts.push(m));
+    reloaded.setConnected(true);
+    reloaded.snapshot(room(3, [line("a", 4)]), "me");
+    assert.equal(view.feedback, "Review your bag; an update was interrupted.");
+    assert.equal(toasts.at(-1), "Review your bag; an update was interrupted.");
+    assert.equal(store.has(key), false, "the marker clears after the authoritative snapshot");
+
+    send.resolve({ bag: { revision: 4, pricedAt: 1, items: [line("a", 5)] } });
+    await new Promise((resolve) => setTimeout(resolve));
+    assert.equal(view.changed, null, "an own acknowledgement does not highlight");
+    assert.match(view.feedback, /^Added Cap/);
+    model.snapshot(room(4, [line("a", 5)]), "me");
+    assert.equal(view.feedback, "", "an unchanged resync clears a stale confirmation");
+    assert.equal(view.changed, null, "an unchanged resync does not highlight");
+  } finally {
+    if (previousStorage) Object.defineProperty(globalThis, "sessionStorage", previousStorage);
+    else delete globalThis.sessionStorage;
+  }
+});
+
+test("checkout feedback survives lease snapshots but clears after a real reconnect", async () => {
+  const storage = new Map();
+  const previousStorage = Object.getOwnPropertyDescriptor(globalThis, "sessionStorage");
+  Object.defineProperty(globalThis, "sessionStorage", {
+    configurable: true,
+    value: {
+      getItem: (key) => (storage.has(key) ? storage.get(key) : null),
+      setItem: (key, value) => storage.set(key, String(value)),
+      removeItem: (key) => storage.delete(key),
+    },
+  });
+  try {
+    const bag = { revision: 1, pricedAt: 1, items: [{ variantId: "a", quantity: 1, cents: 1000, available: true, pickedBy: { id: "me" } }] };
+    const room = (checkout) => ({ id: "room", checkoutEnabled: true, checkout, bag });
+    let view;
+    const model = createBag(
+      () => new Promise(() => {}),
+      async () => {
+        throw Object.assign(new Error("A price changed. Review your bag."), { code: "CHECKOUT_REVIEW" });
+      },
+      (next) => (view = next),
+      () => {},
+    );
+    model.setConnected(true);
+    model.snapshot(room(null), "me");
+    await model.startCheckout();
+    assert.equal(view.feedback, "A price changed. Review your bag.");
+    model.snapshot(room(null), "me");
+    assert.equal(view.feedback, "A price changed. Review your bag.", "a lease snapshot keeps the fresh error");
+    model.setConnected(false);
+    model.setConnected(true);
+    model.snapshot(room(null), "me");
+    assert.equal(view.feedback, "", "the first snapshot after a reconnect clears it");
+    assert.equal(view.changed, null);
+
+    let reject;
+    const timed = createBag(
+      () => new Promise((_, no) => (reject = no)),
+      null,
+      (next) => (view = next),
+      () => {},
+    );
+    timed.setConnected(true);
+    timed.snapshot({ ...room(null), checkoutEnabled: false }, "me");
+    timed.change("add", { ...bag.items[0], name: "Cap", variant: "Black" });
+    assert.ok(view.pending.has("a"), "Saving stays while the change is pending");
+    timed.setConnected(false);
+    reject(Object.assign(new Error("Couldn’t confirm that action."), { code: "COMMAND_TIMEOUT" }));
+    await new Promise((resolve) => setTimeout(resolve));
+    assert.equal(view.feedback, "");
+    assert.ok(storage.has("coshop:bag-pending:room:me"), "the marker survives a reload before reconnect");
+    timed.setConnected(true);
+    timed.snapshot({ ...room(null), checkoutEnabled: false }, "me");
+    assert.equal(view.feedback, "Review your bag; an update was interrupted.");
+    assert.equal(storage.has("coshop:bag-pending:room:me"), false);
+    timed.snapshot({ ...room(null), checkoutEnabled: false }, "me");
+    assert.equal(view.feedback, "Review your bag; an update was interrupted.", "the notice stays until the next action");
+  } finally {
+    if (previousStorage) Object.defineProperty(globalThis, "sessionStorage", previousStorage);
+    else delete globalThis.sessionStorage;
+  }
+});

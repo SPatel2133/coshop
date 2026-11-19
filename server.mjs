@@ -15,7 +15,7 @@ import {
 import { nodeStore, migrate } from "./server/storage.js";
 import { Rooms, roomHttp, json } from "./server/rooms.js";
 import { Storefront } from "./server/storefront.js";
-import { readPaidWebhook } from "./server/order-webhook.js";
+import { logWebhook, readPaidWebhook } from "./server/order-webhook.js";
 import { catalog } from "./catalog.mjs";
 import { discussionFor, isDiscussion } from "./server/discussion.js";
 import { consume, rateKey } from "./server/abuse.js";
@@ -105,6 +105,14 @@ migrate(
   store,
   await readFile(new URL("drizzle/room-object/0007_haul.sql", root), "utf8"),
   7,
+);
+migrate(
+  store,
+  await readFile(
+    new URL("drizzle/room-object/0008_checkout_resume.sql", root),
+    "utf8",
+  ),
+  8,
 );
 const rooms = new Rooms(store, config, Date.now, catalog, storefront, true),
   clients = new Map();
@@ -199,9 +207,14 @@ const server = http.createServer(async (req, res) => {
     }
     let response;
     if (url.pathname === "/api/shopify/orders-paid") {
-      const order = await readPaidWebhook(request, config);
-      if (order && (await rooms.haul.paid(order))) roomId = order.room;
-      response = json({ received: true });
+      const { order, outcome: parsed } = await readPaidWebhook(
+        request,
+        config,
+      );
+      const outcome = order ? await rooms.haul.paid(order) : parsed;
+      if (outcome === "recorded") roomId = order.room;
+      logWebhook(request, outcome);
+      response = json({ received: true, outcome });
     } else if (url.pathname === "/api/rooms" && req.method === "POST") {
       await limit(req.socket.remoteAddress || "unknown", "create");
       roomId = crypto.randomUUID();
@@ -260,6 +273,8 @@ server.on("upgrade", async (req, socket, head) => {
       }, 5000);
       ws.on("error", () => {});
       ws.on("message", async (raw, binary) => {
+        // Only the frame that set busy may clear it.
+        let owner = false;
         try {
           if (binary || c.busy)
             throw new RoomError("INVALID_MESSAGE", "Wait for authentication.");
@@ -281,7 +296,7 @@ server.on("upgrade", async (req, socket, head) => {
                 "Authenticate first.",
                 401,
               );
-            c.busy = true;
+            c.busy = owner = true;
             const hash = await tokenHash(message.token);
             if (ws.readyState !== 1) return;
             c.person = rooms.connect(roomId, hash, c.id).id;
@@ -340,7 +355,7 @@ server.on("upgrade", async (req, socket, head) => {
           if ([401, 410, 429].includes(error.status))
             ws.close(4001, "Reconnect required");
         } finally {
-          c.busy = false;
+          if (owner) c.busy = false;
         }
       });
       ws.on("close", () => {

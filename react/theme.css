@@ -1620,13 +1620,16 @@ html.coshop-modal-open body {
   z-index: 8;
   inset: calc(100% + var(--space-4)) auto auto 0;
   inline-size: max-content;
-  max-inline-size: min(212px, 80vw);
+  max-inline-size: min(340px, 80vw);
   pointer-events: none;
 }
 
-.find-live-notice span {
-  display: block;
-  padding: var(--space-4) var(--space-12);
+.find-live-notice .find-notice {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 4px 0 12px;
+  pointer-events: auto;
   border: 1px solid var(--edge);
   border-radius: 999px;
   background: var(--sheet);
@@ -1693,7 +1696,7 @@ html.coshop-modal-open body {
   border-color: var(--sea);
 }
 
-#root .find-live-notice span {
+#root .find-live-notice .find-notice {
   background: var(--apricot);
   color: var(--navy);
 }
@@ -1941,4 +1944,217 @@ html.coshop-modal-open body {
   .product-gallery {
     --gallery-height: 32dvh;
   }
+}
+
+/* Room feedback cues */
+.finds-shortcut {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding-inline: var(--space-12);
+}
+.unseen-pulse {
+  animation: confirm-count 420ms var(--motion-ease) both;
+}
+/* The unseen badge overlays the launcher corner so a new count never resizes it. */
+#root .activity-launch {
+  position: relative;
+}
+#root .activity-launch .react-count {
+  position: absolute;
+  inset: -8px -8px auto auto;
+}
+@media (min-width: 1180px) {
+  .finds-shortcut {
+    display: none;
+  }
+  #root .activity-launch .react-count {
+    inset: -8px auto auto -8px;
+  }
+}
+.react-bag-line.line-changed {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: 6px;
+  animation: line-changed 1200ms ease-out both;
+}
+@keyframes line-changed {
+  from {
+    background: var(--mist);
+  }
+}
+.line-updated {
+  font-weight: 500;
+}
+.react-bag-line .bag-line-note {
+  grid-column: 2;
+  margin: 0;
+}
+@media (max-width: 520px) {
+  .finds-shortcut {
+    font-size: 12px;
+  }
+}
+@media (max-width: 390px) {
+  .finds-shortcut {
+    padding-inline: var(--space-8);
+  }
+}
+
+.react-presence {
+  display: grid;
+  gap: 4px 12px;
+}
+.react-presence .seat-list {
+  min-inline-size: 0;
+}
+.react-share-slot {
+  height: auto;
+  min-height: 44px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+#root .react-presence .activity-launcher {
+  position: relative;
+  inset: auto;
+  transform: none;
+}
+#root .react-presence .activity-launch {
+  writing-mode: horizontal-tb;
+  min-height: 44px;
+  border-radius: 8px;
+}
+#root .react-presence .activity-launch .react-count {
+  inset: -8px -8px auto auto;
+  white-space: nowrap;
+}
+.react-presence .find-live-notice {
+  inset: calc(100% + 4px) auto auto 0;
+  transform: none;
+}
+.find-notice button {
+  flex: none;
+  min-height: 44px;
+}
+@media (min-width: 1180px) {
+  .react-presence .find-live-notice {
+    inset-inline: auto 0;
+  }
+}
+@media (min-width: 1180px) {
+  #root .react-presence {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+    min-height: 72px;
+    padding: 16px 20px;
+  }
+  #root:has(#finds-drawer.react-activity-dock[open]) .react-presence {
+    padding-inline-end: calc(20px + var(--drawer-inset));
+  }
+  .react-presence .company-heading {
+    grid-column: 2;
+    grid-row: 1;
+    flex-direction: column;
+    gap: 0;
+  }
+  .react-presence .seat-list {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .react-presence .react-share-slot {
+    grid-column: 3;
+  }
+}
+@media (max-width: 1179px) {
+  .react-presence {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: center;
+  }
+  .react-presence .company-heading {
+    grid-column: 2;
+    grid-row: 1;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0;
+  }
+  .react-presence .seat-list {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .react-presence .react-share-slot {
+    grid-column: 1 / -1;
+    flex-wrap: nowrap;
+  }
+  .react-presence .activity-launch {
+    padding-inline: 8px;
+  }
+  .react-presence:has(.react-checkout-note, .react-recap-shortcut) .react-share-slot {
+    grid-column: 1 / -1;
+    flex-wrap: wrap;
+  }
+}
+.react-product-detail .product-copy {
+  gap: 0;
+  padding-block: 0;
+}
+.react-product-detail .product-copy h2 {
+  font-size: clamp(30px, 5vw, 40px);
+  line-height: 1.1;
+  letter-spacing: -0.04em;
+  overflow-wrap: anywhere;
+}
+#root .product-copy .detail-price {
+  margin-block-start: 12px;
+  font-size: 24px;
+  line-height: 1.3;
+}
+.product-copy .detail-description {
+  margin-block-start: 16px;
+  max-inline-size: 44ch;
+  font-size: 16px;
+  line-height: 1.55;
+}
+.detail-variants {
+  display: grid;
+  gap: 8px;
+  margin-block-start: 24px;
+  min-inline-size: 0;
+}
+.color-options {
+  padding: 0;
+  border: 0;
+  margin: 0;
+  min-inline-size: 0;
+}
+.color-option-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-block-start: 8px;
+}
+.color-option-list button {
+  min-inline-size: 44px;
+  min-block-size: 44px;
+}
+.color-option-list button[aria-pressed="true"] {
+  box-shadow: inset 0 0 0 2px var(--sea);
+}
+.product-copy .react-product-actions {
+  margin-block-start: 20px;
+  gap: 12px;
+}
+.product-copy .react-product-actions button {
+  min-block-size: 44px;
+  flex: 1 1 125px;
+}
+.product-copy .fine {
+  margin-block-start: 12px;
+}
+.react-card-copy {
+  padding-block-start: 12px;
+}
+#root .react-card-copy h3 {
+  font-size: 15px;
+  line-height: 1.4;
 }

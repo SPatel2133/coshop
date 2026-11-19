@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
 const root = fileURLToPath(new URL("../../", import.meta.url));
 export const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-export async function launch(t, worker, extra = {}) {
+export async function launch(t, worker, extra = {}, nodeArgs = []) {
   const directory = await mkdtemp(join(tmpdir(), "coshop-phase1-")),
     port = Number(extra.TEST_PORT || (worker ? 14295 : 14294));
   const env = {
@@ -31,6 +31,8 @@ export async function launch(t, worker, extra = {}) {
     "HEARTBEAT_INTERVAL_MS",
     "HEARTBEAT_TIMEOUT_MS",
     "PRESENCE_IDLE_MS",
+    "SHOPIFY_STORE_DOMAIN",
+    "SHOPIFY_WEBHOOK_SECRET",
   ]
     .filter((key) => env[key])
     .flatMap((key) => ["--var", key + ":" + env[key]]);
@@ -49,7 +51,7 @@ export async function launch(t, worker, extra = {}) {
         directory,
         ...bindings,
       ]
-    : ["server.mjs"];
+    : [...nodeArgs, "server.mjs"];
   const child = spawn(process.execPath, args, {
     cwd: root,
     env,

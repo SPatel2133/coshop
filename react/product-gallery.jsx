@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import gallery from "./sample-gallery.json";
 import { Photo } from "./ui.jsx";
 
-export function ProductGallery({ product, variant }) {
+export function ProductGallery({ product, variant, scope }) {
   const primary = variant.image || product.image;
   const extras = gallery[variant.id] || gallery[product.id] || [];
   const images = [
@@ -12,11 +12,24 @@ export function ProductGallery({ product, variant }) {
       label: `Show ${view} of ${product.name} — ${variant.title}`,
     })),
   ];
-  return <GalleryMedia key={variant.id} images={images} name={product.name} primary={primary} />;
+  const memory = scope && ["coshop:photo", scope, product.id, variant.id].join(":");
+  return <GalleryMedia key={variant.id} images={images} name={product.name} primary={primary} memory={memory} />;
 }
 
-function GalleryMedia({ images, name, primary }) {
-  const [selected, select] = useState(primary);
+function GalleryMedia({ images, name, primary, memory }) {
+  const [selected, setSelected] = useState(() => {
+    let saved;
+    try {
+      saved = memory && sessionStorage.getItem(memory);
+    } catch {}
+    return images.some(({ src }) => src === saved) ? saved : primary;
+  });
+  const select = (src) => {
+    setSelected(src);
+    try {
+      if (memory) sessionStorage.setItem(memory, src);
+    } catch {}
+  };
   const [failed, setFailed] = useState(() => new Set());
   const usable = images.filter(({ src }) => !failed.has(src));
   const current = usable.find(({ src }) => src === selected) || usable[0];

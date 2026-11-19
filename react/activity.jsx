@@ -220,6 +220,9 @@ function FindCard({
   const summary = store.discussion.summary(find.id) || empty;
   const rating = store.discussion.rating(find.id);
   const quickOpen = social.quick?.id === find.id;
+  const inBag =
+    state.bag.confirmed?.items.find((item) => item.variantId === find.variantId)
+      ?.quantity || 0;
   const comment = useRef(null);
   function endQuick(restore = true) {
     quickToken.current = null;
@@ -248,6 +251,9 @@ function FindCard({
             {find.variant} · {money(find, "code")}
           </p>
           <p className="fine">Shared by {find.sharedBy.name}</p>
+          <p className="fine find-bag-status">
+            {inBag ? "In bag · " + inBag : "Not in bag yet"}
+          </p>
         </div>
       </div>
       {find.available === false && (

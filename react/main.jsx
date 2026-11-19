@@ -37,6 +37,8 @@ function Room({ state, store }) {
     quick: null,
   });
   const [notice, setNotice] = useState(null);
+  const [noticeFocused, setNoticeFocused] = useState(false);
+  const panelOrigin = useRef(null);
   const quickToken = useRef(null);
   const anchors = useRef({ finds: 0, threads: new Map() });
   const roomHeading = useRef(null);
@@ -57,17 +59,26 @@ function Room({ state, store }) {
   );
   const showingProduct = Boolean(product && variant);
   const count = state.bag.confirmed?.totalQuantity || 0;
+  const noticeProduct = notice && state.products.find((item) => item.id === notice.find.productId);
+  const noticeText = notice && !panel
+    ? notice.sender + " shared " + (noticeProduct?.name || "a find")
+    : "";
 
   useEffect(() => {
     if (state.incoming && !panel) setNotice(state.incoming);
   }, [state.incoming]);
   useEffect(() => {
-    if (!notice) return;
-    const timer = setTimeout(() => setNotice(null), 3000);
+    if (!notice || noticeFocused) return;
+    const timer = setTimeout(() => setNotice(null), 8000);
     return () => clearTimeout(timer);
-  }, [notice]);
+  }, [notice, noticeFocused]);
 
   useLayoutEffect(() => focus(roomHeading.current), []);
+  function openPanel(origin) {
+    panelOrigin.current = origin;
+    setNotice(null);
+    setPanel(true);
+  }
   function restore(node, fallback) {
     requestAnimationFrame(() =>
       focus(
@@ -190,7 +201,9 @@ function Room({ state, store }) {
     const presence = document.querySelector(".react-presence");
     const section = document.querySelector("#product-dialog");
     const correct = () => {
-      if (detailTop.current == null || scrollY > detailTop.current + 80) return;
+      // Re-align only while the shopper is still at the aligned position, never over their own scroll.
+      if (detailTop.current == null || Math.abs(scrollY - detailTop.current) > 1)
+        return;
       const bar = presence.getBoundingClientRect();
       if (section.getBoundingClientRect().top < bar.bottom + 4) alignDetail();
     };
@@ -224,7 +237,8 @@ function Room({ state, store }) {
     setPanel(false);
     quickToken.current = null;
     setSocial((current) => ({ ...current, quick: null }));
-    restore(activityButton.current);
+    restore(panelOrigin.current, activityButton.current);
+    panelOrigin.current = null;
   }
 
   function preview(find, node) {
@@ -251,33 +265,6 @@ function Room({ state, store }) {
             )}
           </span>
 
-          <div className="activity-launcher">
-            <button
-              ref={activityButton}
-              id="open-finds"
-              className="secondary activity-launch"
-              aria-expanded={panel}
-              aria-haspopup="dialog"
-              aria-controls="finds-drawer"
-              aria-label={
-                "Around the room" +
-                (state.unseen ? ", " + state.unseen + " unseen" : "")
-              }
-              onClick={() => {
-                if (panel) return closePanel();
-                setNotice(null);
-                setPanel(true);
-              }}
-            >
-              Around the room{" "}
-              {state.unseen > 0 && (
-                <span className="react-count">{state.unseen}</span>
-              )}
-            </button>
-            <div className="find-live-notice" role="status" aria-atomic="true">
-              {notice && !panel && <span>{notice.sender} shared a find.</span>}
-            </div>
-          </div>
           <button
             className="secondary"
             onClick={(event) => open("invite", event.currentTarget)}
@@ -295,6 +282,52 @@ function Room({ state, store }) {
         peek={(person, node) => open("peek", node, { person })}
       >
         <div className="react-share-slot">
+          <div className="activity-launcher">
+            <button
+              ref={activityButton}
+              id="open-finds"
+              className="secondary activity-launch"
+              aria-expanded={panel}
+              aria-haspopup="dialog"
+              aria-controls="finds-drawer"
+              aria-label={
+                "Our finds" +
+                (state.unseen ? ", " + state.unseen + " new" : "")
+              }
+              onClick={() => {
+                if (panel) return closePanel();
+                openPanel(activityButton.current);
+              }}
+            >
+              Our finds{" "}
+              {state.unseen > 0 && (
+                <span key={state.unseen} className="react-count unseen-pulse" aria-hidden="true">
+                  {state.unseen} new
+                </span>
+              )}
+            </button>
+            <div className="find-live-notice">
+              <span className="sr-only" role="status" aria-atomic="true">{noticeText}</span>
+              {notice && !panel && (
+                <div className="find-notice">
+                  <span aria-hidden="true">{noticeText}</span>
+                  <button
+                    className="quiet"
+                    onFocus={() => setNoticeFocused(true)}
+                    onBlur={() => setNoticeFocused(false)}
+                    onClick={() => {
+                      store.markSeen(notice.find.variantId);
+                      open("peek", activityButton.current, { find: notice.find });
+                      setNotice(null);
+                      setNoticeFocused(false);
+                    }}
+                  >
+                    View find
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
           <button
             ref={bagButton}
             id="open-bag"
@@ -348,6 +381,7 @@ function Room({ state, store }) {
           {showingProduct && (
             <Product
               {...{ state, store, product, variant }}
+              openFinds={openPanel}
               peek={(person, node) => open("peek", node, { person })}
               select={(variantId) =>
                 store.setView({
@@ -385,7 +419,13 @@ function Room({ state, store }) {
         </Modal>
       </div>
       {overlay?.kind === "quick-add" && (
-        <QuickAdd product={overlay.product} state={state} store={store} close={finish} />
+        <QuickAdd
+          product={overlay.product}
+          state={state}
+          store={store}
+          close={finish}
+          openFinds={() => openPanel(trigger.current)}
+        />
       )}
       {overlay?.kind === "invite" && (
         <Invite room={state.room} invite={state.invite} finish={finish} />
