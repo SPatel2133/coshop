@@ -12,4 +12,3 @@ Prepared for runtime candidate `f3351ac4cb612aa8bdf2d6bdaf12400d533636a0`. Use t
 | 55–60s | Show the repository evidence links. “The browser test and fault-injection results document what this candidate verifies.” |
 
 Rehearse against the exact final candidate and record its SHA. If showing a Haul in sample mode, keep “Demo completion · simulated” visible and describe it as simulated. Include Shopify checkout and a paid recap only after the supervised test verifies them.
-

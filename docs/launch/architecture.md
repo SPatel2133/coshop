@@ -36,4 +36,3 @@ flowchart TD
 ## Verification boundary
 
 The public sample catalog and simulated Haul do not exercise payment. Existing fixture tests use synthetic Shopify responses. A live paid attribution chain remains unproved until a supervised development-store test produces actual order and webhook evidence. The local recovery and attribution fixtures passed independent review. The supervised live test remains pending.
-

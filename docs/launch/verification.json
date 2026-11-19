@@ -64,12 +64,17 @@
       "rejectedSignedWebhookLogs": "no secrets"
     }
   },
-  "recording": "https://app.devin.ai/sessions/1045c6a3a800452da98cf56473556601?testRecording=3b1a89fe-eedd-4d72-a0e3-2892859281c4",
   "openGates": [
     "Supervised live Shopify order and webhook test (development-store secrets and explicit order approval)",
     "Reconnect slower than 15 seconds untested",
+    "Phone widths 360/390 px covered at baseline 2b53c52 only, not on the final candidate",
     "G3: unsent add lost on refresh; proposed feedback pending user approval",
     "Visual UX changes pending user approval",
     "Merge and deployment pending user approval"
-  ]
+  ],
+  "recordings": {
+    "main": "https://app.devin.ai/sessions/1045c6a3a800452da98cf56473556601?testRecording=3b1a89fe-eedd-4d72-a0e3-2892859281c4",
+    "supplemental": "https://app.devin.ai/attachments/e307f1ff-f1ac-49db-8d32-d0eaeac2d739/rec-098eb108-35b9-4797-8dd4-e9be56efbb53-edited.mp4",
+    "supplementalScope": "Baseline 2b53c52: 360/390 px no overflow, focus restored; real errors for stale remove rollback, 99 cap, unavailable size, variant tampering, expired room; busy lock and rate-limit errors simulated"
+  }
 }

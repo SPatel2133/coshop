@@ -33,4 +33,3 @@ An unsent bag command is lost on reload. The client has no durable outgoing queu
 ## What can I honestly claim about production?
 
 Sample products and a simulated recap are available in the public demo. Existing integration fixtures are synthetic. Live checkout and paid attribution require an actual development-store test with explicit order approval. Describe the results attached to each tested SHA and environment. Local loopback convergence times do not measure internet latency or browser rendering.
-
