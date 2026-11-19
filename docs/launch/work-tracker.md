@@ -4,9 +4,10 @@
 
 Updated 2026-11-19. Read this first. The sections below are chronological, so rows marked pending there describe the state when they were written.
 
-- [Integration PR #3](https://github.com/SPatel2133/coshop/pull/3) is an unmerged draft. It combines checkout [PR #2](https://github.com/SPatel2133/coshop/pull/2) head `ae2d286f4a6e97ce32c1500662a1693d6c7f0ef6` with CI [PR #1](https://github.com/SPatel2133/coshop/pull/1) head `b6fb28e9a4b086f677fca3df56f07d28d093d763`, plus this documentation set. Final test, build, browser and evidence results for its head commit are reported in PR #3's checks.
+- [Integration PR #3](https://github.com/SPatel2133/coshop/pull/3) is an unmerged draft. It combines checkout [PR #2](https://github.com/SPatel2133/coshop/pull/2) head `ae2d286f4a6e97ce32c1500662a1693d6c7f0ef6` with CI [PR #1](https://github.com/SPatel2133/coshop/pull/1) head `b6fb28e9a4b086f677fca3df56f07d28d093d763`, plus this documentation set.
+- Tested integration commit `8690efcf4b50be29c123bdf9ddef8c5d42dea7bb` passed [CI run 44495198821](https://github.com/SPatel2133/coshop/actions/runs/44495198821): build, 87 tests, 19 browser tests and all three evidence commands. A fresh Linux clone (Node v24.22.3, pnpm 11.25.0) gave the same results, with evidence reporting `dirty=false`. The [sanitized CI artifact](https://github.com/SPatel2133/coshop/actions/runs/44495198821/artifacts/14514866670) expires 2026-12-03. Later commits on PR #3 change documentation only.
 - After `f3351ac`, runtime source changed only in `server/order-webhook.js` (`f037cd2`). That change logs a reason for each webhook rejection. The response is still a generic 401. Every other change after `f3351ac` touches the verifier script, tests or runbook.
-- The earlier combined candidate `cfa00e7bac781e6ff2806cfa1d12f6d43476146d` passed [CI run 44492981257](https://github.com/SPatel2133/coshop/actions/runs/44492981257): 87 tests, 19 browser tests and all three evidence commands.
+- Independent verifier evidence: earlier evidence covers runtime candidate `f3351ac` ([case study](case-study.md)) and integration candidate `cfa00e7` ([G1–G3 probes](ux-audit.md#delivery-and-reload-probes)). The independent retest of the final verifier script and webhook at `ae2d286` is pending.
 - Open gates:
   - The supervised live Shopify test needs development-store secrets and explicit approval to place an order.
   - Visual UX changes need user approval.
