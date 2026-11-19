@@ -67,15 +67,30 @@ writes the same lines to stdout.
 | Name | Purpose |
 | --- | --- |
 | `SHOPIFY_STORE_DOMAIN` | Dev store `*.myshopify.com` domain |
-| `SHOPIFY_STOREFRONT_TOKEN` | Storefront API token with product-listing read and checkout write access (`unauthenticated_read_product_listings`, `unauthenticated_write_checkouts`); confirm the current scope names in Shopify docs at run time |
-| `SHOPIFY_API_VERSION` | Must match the webhook subscription API version |
+| `SHOPIFY_STOREFRONT_TOKEN` | Storefront API token with product-listing read and checkout write access; take the exact scope names from the access-scopes page for the configured version (below) at run time |
+| `SHOPIFY_API_VERSION` | `.env.example` uses `2026-10`; must match the webhook subscription API version |
 | `SHOPIFY_BUYER_COUNTRY` | Buyer country for pricing context |
 | `SHOPIFY_WEBHOOK_SECRET` | Secret Shopify signs `orders/paid` with (app client secret, or the admin notifications secret) |
 | `INVITE_SIGNING_SECRET` | Room invite signing |
 
 Webhook: topic `orders/paid`, JSON, endpoint `https://<supervised host>/api/shopify/orders-paid`
-(the subscriber needs `read_orders`). The store must use test payments (for example the Bogus
-Gateway) so no real charge occurs.
+(the subscriber needs order read access). Use a development store with a test payment gateway,
+so **no real charge occurs**. A live run needs explicit approval from the user every time.
+
+Sources (open the pages for the configured `SHOPIFY_API_VERSION` and replace the version in
+the URL if it differs):
+
+- Development stores and test payments: https://shopify.dev/docs/apps/build/stores/development-stores
+- Cart attributes carry over to the resulting order: https://shopify.dev/docs/api/storefront/2026-10/objects/Attribute
+  (reviewed at `2026-01`)
+- Storefront access scopes: https://shopify.dev/docs/api/usage/access-scopes
+- Webhook topics (`orders/paid`): https://shopify.dev/docs/api/admin-graphql/2026-10/enums/WebhookSubscriptionTopic
+
+**Unproven until a real supervised test:** that the paid order payload carries
+`_coshop_haul` in `note_attributes` and a `cart_token` whose SHA-256 equals the digest of
+the cart id token that CoShop bound at `cartCreate`. The fixtures assume this; if it does not
+hold, every live order will report `attempt_unbound` or `cart_mismatch` and no recap is written
+(fail closed).
 
 ## Supervised procedure (after authorization)
 
