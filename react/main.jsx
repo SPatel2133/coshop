@@ -196,7 +196,9 @@ function Room({ state, store }) {
     const presence = document.querySelector(".react-presence");
     const section = document.querySelector("#product-dialog");
     const correct = () => {
-      if (detailTop.current == null || scrollY > detailTop.current + 80) return;
+      // Re-align only while the shopper is still at the aligned position, never over their own scroll.
+      if (detailTop.current == null || Math.abs(scrollY - detailTop.current) > 1)
+        return;
       const bar = presence.getBoundingClientRect();
       if (section.getBoundingClientRect().top < bar.bottom + 4) alignDetail();
     };

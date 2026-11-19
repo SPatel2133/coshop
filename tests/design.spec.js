@@ -1164,3 +1164,32 @@ test("a failed demo completion survives a peer joining but clears after a real r
     await context.close();
   }
 });
+
+test("opening the desktop finds dock right after a small product-page scroll keeps the shopper's position", async ({ page, browser }) => {
+  const context = await browser.newContext();
+  const maya = await context.newPage();
+  try {
+    for (const width of [1440, 1280]) {
+      for (const shopper of [page, maya]) await shopper.setViewportSize({ width, height: 760 });
+      if (width === 1440) {
+        await room(page);
+        await joinRoom(page, maya, "Maya");
+      } else await page.getByRole("button", { name: "← Back to the collection" }).click();
+      await openHeadphones(page);
+      await expect(page.locator("#product-heading")).toBeFocused();
+      const aligned = await page.evaluate(() => scrollY);
+      await page.mouse.move(width / 2, 400);
+      await page.mouse.wheel(0, 9);
+      await expect.poll(() => page.evaluate(() => scrollY)).toBe(aligned + 9);
+      await page.locator("#open-finds").focus();
+      await page.keyboard.press("Enter");
+      await expect(page.getByRole("dialog", { name: "Around the room" })).toBeVisible();
+      expect(await page.evaluate(() => scrollY)).toBe(aligned + 9);
+      await page.keyboard.press("Escape");
+      await expect(page.locator("#open-finds")).toBeFocused();
+      expect(await page.evaluate(() => scrollY)).toBe(aligned + 9);
+    }
+  } finally {
+    await context.close();
+  }
+});
