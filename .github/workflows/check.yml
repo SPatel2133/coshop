@@ -15,3 +15,116 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: node scripts/build.mjs
       - run: pnpm test
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Same-origin frontend on loopback only; no deployed backend or public origin.
+      VITE_ROOM_BACKEND_ORIGIN: ""
+      PUBLIC_ORIGIN: ""
+      HOST: 127.0.0.1
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - run: npm install --global pnpm@11.25.0
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: mkdir -p "$RUNNER_TEMP/coshop-summary" "$RUNNER_TEMP/coshop-raw"
+      - run: node scripts/build.mjs --assets-only
+      - name: Browser suite against an isolated preview server
+        env:
+          PORT: "4204"
+          CREATE_LIMIT_PER_HOUR: "100"
+          JOIN_LIMIT_PER_10_MIN: "150"
+          COSHOP_TEST_URL: http://127.0.0.1:4204
+          PLAYWRIGHT_JSON_OUTPUT_FILE: ${{ runner.temp }}/coshop-raw/design.json
+        run: |
+          DATA_DIR="$(mktemp -d)"
+          export DATA_DIR
+          node server.mjs > "$RUNNER_TEMP/coshop-raw/preview.log" 2>&1 &
+          server=$!
+          trap 'kill "$server" 2>/dev/null || true; rm -rf "$DATA_DIR"' EXIT
+          for attempt in $(seq 30); do
+            if grep -q "coshop: http://localhost:$PORT" "$RUNNER_TEMP/coshop-raw/preview.log" &&
+              curl -sf "$COSHOP_TEST_URL/" > /dev/null; then
+              break
+            fi
+            if ! kill -0 "$server" 2>/dev/null; then
+              echo "::error::Preview server exited during startup"
+              exit 1
+            fi
+            if [ "$attempt" -eq 30 ]; then
+              echo "::error::Preview server was not ready after 30 seconds"
+              exit 1
+            fi
+            sleep 1
+          done
+          pnpm exec playwright test tests/design.spec.js --workers=1 --reporter=list,json \
+            --output "$RUNNER_TEMP/coshop-raw/test-results"
+      - name: Evidence reproduce
+        if: ${{ !cancelled() }}
+        env:
+          TMPDIR: ${{ runner.temp }}/evidence-reproduce
+        run: mkdir -p "$TMPDIR" && node scripts/evidence.mjs reproduce
+      - name: Evidence measure
+        if: ${{ !cancelled() }}
+        env:
+          TMPDIR: ${{ runner.temp }}/evidence-measure
+        run: mkdir -p "$TMPDIR" && node scripts/evidence.mjs measure
+      - name: Evidence diagnose
+        if: ${{ !cancelled() }}
+        env:
+          TMPDIR: ${{ runner.temp }}/evidence-diagnose
+        run: mkdir -p "$TMPDIR" && node scripts/evidence.mjs diagnose
+      # Keep only machine-readable outcomes. Reports, traces, logs, browser
+      # profiles and room data can contain disposable invites or tokens.
+      - name: Collect sanitized summaries
+        if: ${{ !cancelled() }}
+        run: |
+          summary="$RUNNER_TEMP/coshop-summary"
+          for mode in reproduce measure diagnose; do
+            for dir in "$RUNNER_TEMP/evidence-$mode"/coshop-evidence-*; do
+              if [ -f "$dir/result.json" ]; then
+                cp "$dir/result.json" "$summary/evidence-$mode.json"
+              fi
+              if [ -f "$dir/playwright.json" ]; then
+                cp "$dir/playwright.json" "$RUNNER_TEMP/coshop-raw/reproduce.json"
+              fi
+            done
+          done
+          for name in design reproduce; do
+            node -e '
+              const fs = require("node:fs");
+              const [raw, out] = process.argv.slice(1);
+              if (!fs.existsSync(raw)) process.exit(0);
+              const report = JSON.parse(fs.readFileSync(raw, "utf8"));
+              const tests = [];
+              const walk = (suite) => {
+                for (const spec of suite.specs || [])
+                  for (const test of spec.tests)
+                    tests.push({
+                      title: spec.title,
+                      line: spec.line,
+                      status: test.status,
+                      attempts: test.results.length,
+                      durationMs: test.results.reduce((sum, r) => sum + r.duration, 0),
+                    });
+                (suite.suites || []).forEach(walk);
+              };
+              (report.suites || []).forEach(walk);
+              const { expected, unexpected, flaky, skipped, duration } = report.stats || {};
+              const stats = { expected, unexpected, flaky, skipped, duration };
+              fs.writeFileSync(out, JSON.stringify({ stats, tests }, null, 2) + "\n");
+            ' "$RUNNER_TEMP/coshop-raw/$name.json" "$summary/playwright-$name.json"
+          done
+          ls -la "$summary"
+      - uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          name: coshop-browser-summary
+          path: ${{ runner.temp }}/coshop-summary/
+          if-no-files-found: warn
+          retention-days: 14
