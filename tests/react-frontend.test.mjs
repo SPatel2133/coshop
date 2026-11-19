@@ -163,6 +163,8 @@ test("bag highlights only changed lines on resync and flags an interrupted chang
     model.snapshot(room(3, [line("a", 4)]), "me");
     assert.equal(view.changed, null);
     assert.equal(view.feedback, "Bag refreshed · 1 removed.");
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    assert.equal(view.feedback, "", "a removal-only refresh message clears too");
 
     model.change("add", { ...line("a", 4), name: "Cap", variant: "Black" });
     const key = "coshop:bag-pending:room:me";

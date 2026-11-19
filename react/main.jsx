@@ -277,7 +277,9 @@ function Room({ state, store }) {
             >
               Around the room{" "}
               {state.unseen > 0 && (
-                <span className="react-count">{state.unseen}</span>
+                <span key={state.unseen} className="react-count unseen-pulse">
+                  {state.unseen}
+                </span>
               )}
             </button>
             <div className="find-live-notice" role="status" aria-atomic="true">

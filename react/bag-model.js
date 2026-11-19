@@ -119,12 +119,11 @@ class BagModel {
           .filter(Boolean)
           .join(", ") +
         ".";
-    if (this.changed)
-      this.changeTimer = setTimeout(() => {
-        this.changed = null;
-        if (this.feedback.startsWith("Bag refreshed")) this.feedback = "";
-        this.render();
-      }, this.highlightMs ?? 4000);
+    this.changeTimer = setTimeout(() => {
+      this.changed = null;
+      if (this.feedback.startsWith("Bag refreshed")) this.feedback = "";
+      this.render();
+    }, this.highlightMs ?? 4000);
   }
   remember(identity, variantId, requestId) {
     try {

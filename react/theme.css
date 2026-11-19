@@ -1954,9 +1954,20 @@ html.coshop-modal-open body {
 .unseen-pulse {
   animation: confirm-count 420ms var(--motion-ease) both;
 }
+/* The unseen badge overlays the launcher corner so a new count never resizes it. */
+#root .activity-launch {
+  position: relative;
+}
+#root .activity-launch .react-count {
+  position: absolute;
+  inset: -8px -8px auto auto;
+}
 @media (min-width: 1180px) {
   .finds-shortcut {
     display: none;
+  }
+  #root .activity-launch .react-count {
+    inset: -8px auto auto -8px;
   }
 }
 .react-bag-line.line-changed {

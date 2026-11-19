@@ -862,6 +862,13 @@ for (const width of [360, 390, 1280, 1440]) {
       await page.evaluate(() => scrollTo(0, 700));
       const presence = page.locator(".react-presence");
       const height = (await presence.boundingBox()).height;
+      const geometry = () =>
+        page.evaluate(() => ({
+          head: document.querySelector(".react-room-head").offsetHeight,
+          launcher: document.querySelector("#open-finds").offsetHeight,
+          y: scrollY,
+        }));
+      const stable = await geometry();
       await openHeadphones(maya);
       await maya.getByRole("combobox", { name: "Choose a variant" }).selectOption({ label: "Black" });
       await maya.getByRole("button", { name: "Share find" }).click();
@@ -869,6 +876,9 @@ for (const width of [360, 390, 1280, 1440]) {
       const trigger = narrow ? page.locator(".finds-shortcut") : page.locator("#open-finds");
       await expect(trigger).toHaveAccessibleName(narrow ? "Our finds, 1 unseen" : "Around the room, 1 unseen");
       await expect(trigger).toBeInViewport();
+      expect(await geometry()).toEqual(stable);
+      await expect(page.locator("#open-finds .react-count")).toHaveCSS("animation-name", "confirm-count");
+      if (!narrow) await shot(page, `launcher-badge-${width}`);
       if (narrow) {
         expect((await presence.boundingBox()).height).toBe(height);
         await expect(page.locator("#open-finds")).not.toBeInViewport();
@@ -886,6 +896,7 @@ for (const width of [360, 390, 1280, 1440]) {
       await expect(trigger).toBeFocused();
       await expect(trigger).toBeInViewport();
       expect(await page.evaluate(() => scrollY)).toBe(y);
+      expect(await geometry()).toEqual(stable);
       await maya.getByRole("button", { name: "Add to bag" }).click();
       await bagCount(page, 1);
       await trigger.click();
