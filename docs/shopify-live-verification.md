@@ -53,14 +53,12 @@ Shopify; only the room recap is missing. To investigate, match the logged
 
 ## Observability (Cloudflare)
 
-`wrangler.jsonc` enables persisted Workers Logs at 100% head sampling with
-`invocation_logs: false`, `redact_query_string: true` and traces disabled.
-Invocation logs and traces would record request URLs, and room paths carry signed
-invites. Volume is about one line per webhook delivery plus rare checkout
-warnings, but uncaught exceptions are still logged by the runtime. Retention,
-pricing tier, and whether the setting is inherited by `env.portfolio-preview`
-are **unverified until a deploy**, which is out of scope here. The Node server
-writes the same lines to stdout.
+Persisted Workers Logs are off in `wrangler.jsonc`, matching production. Turning
+them on is a separate approval decision described in the
+[backend rollout runbook](launch/backend-rollout.md#persisted-worker-logs). The
+Worker writes one outcome line per webhook delivery and rare checkout warnings;
+without persisted logs they are visible only through `wrangler tail`. The Node
+server writes the same lines to stdout.
 
 ## Required access and secrets (owner-provisioned, never committed)
 

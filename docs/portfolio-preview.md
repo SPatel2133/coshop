@@ -42,3 +42,5 @@ For production, capture the actual prior frontend deployment and paired backend 
 - GitHub main remained at `067b8a4` at launch. The deployment was built directly from the working tree.
 
 The recruiter-facing production address is now `https://trycoshop.vercel.app/`. The original Vercel hostname remains active for existing invites. The production Worker allows these two exact production origins. Preview still has its own Worker and storage.
+
+For later production Worker releases, follow the [backend rollout runbook](launch/backend-rollout.md).

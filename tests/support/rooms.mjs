@@ -50,6 +50,9 @@ export async function launch(t, worker, extra = {}, nodeArgs = []) {
         "--persist-to",
         directory,
         ...bindings,
+        ...(extra.COSHOP_BUILD_COMMIT
+          ? ["--define", `COSHOP_BUILD_COMMIT:"${extra.COSHOP_BUILD_COMMIT}"`]
+          : []),
       ]
     : [...nodeArgs, "server.mjs"];
   const child = spawn(process.execPath, args, {

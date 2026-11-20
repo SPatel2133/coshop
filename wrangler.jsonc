@@ -18,20 +18,9 @@
     { "tag": "v1-rooms", "new_sqlite_classes": ["RoomObject", "AbuseObject"] },
   ],
   "rules": [{ "type": "Text", "globs": ["**/*.sql"], "fallthrough": true }],
-  // Persisted logs carry only the structured outcome lines CoShop emits.
-  // Invocation logs and traces stay off: request URLs hold room invites.
-  "observability": {
-    "enabled": true,
-    "head_sampling_rate": 1,
-    "redact_query_string": true,
-    "logs": {
-      "enabled": true,
-      "head_sampling_rate": 1,
-      "invocation_logs": false,
-      "persist": true,
-    },
-    "traces": { "enabled": false },
-  },
+  // Persisted Worker logs are a separate approval decision; see
+  // docs/launch/backend-rollout.md before enabling them in production.
+  "observability": { "enabled": false },
   "env": {
     "portfolio-preview": {
       "workers_dev": true,
