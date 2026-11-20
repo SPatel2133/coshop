@@ -466,7 +466,7 @@ export function Activity({
       }}
     >
       <header>
-        <h2 id="finds-heading">Around the room</h2>
+        <h2 id="finds-heading">Our finds</h2>
         <p className="fine">
           {state.room.participants.length} / {state.room.capacity} seats ·{" "}
           {state.online ? "Connected" : "Reconnecting…"}
