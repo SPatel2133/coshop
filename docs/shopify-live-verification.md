@@ -88,11 +88,13 @@ the same pages at that version):
 - `ORDERS_PAID` and its required scopes: https://shopify.dev/docs/api/admin-graphql/2026-10/enums/WebhookSubscriptionTopic
 - `orders/paid` payload (`note_attributes`, `cart_token`): https://shopify.dev/docs/api/webhooks/2026-10
 
-**Unproven until a real supervised test:** that the paid order payload carries
-`_coshop_haul` in `note_attributes` and a `cart_token` whose SHA-256 equals the digest of
-the cart id token that CoShop bound at `cartCreate`. The fixtures assume this; if it does not
-hold, every live order will report `attempt_unbound` or `cart_mismatch` and no recap is written
-(fail closed).
+**Verified on a Bedrock development store (test gateway, 2026-11-20):** the paid order
+carries `_coshop_haul` in `note_attributes`, but its `cart_token` is the token of the
+`/checkouts/cn/<token>` page Shopify redirects to, not the cart id token returned by
+`cartCreate`. Comparing hashes therefore rejected every live order as `cart_mismatch`.
+Attribution now relies on the HMAC-signed `_coshop_haul` tag naming an opened, bound
+attempt on the same shop, and on the order's variant ids and quantities exactly matching
+that attempt's snapshot; anything else fails closed with `cart_mismatch`.
 
 ## Supervised procedure (only after authorization)
 
@@ -130,7 +132,7 @@ attempt labels `A1`/`A2`, no raw ids.
 | `paidRecap.attempt` | `A1` | The room shows the recap received last |
 | `passed` / `failures` | `true` / `[]` | The script exits 1 and lists reasons (`paid_recap_missing`, `recap_order`, `snapshot_mismatch_A1`, …) when a requested check fails or times out |
 | `redelivery.recapCountBefore` / `After` | `2` / `2`, `duplicateDeliveryVerified: false` | The redelivery created no recap. The script cannot prove a signed duplicate arrived: the operator must confirm the `duplicate` line in `webhook-log.jsonl` |
-| Log outcomes in receipt order | `recorded`, `recorded`, `duplicate` | `recorded` proves the HMAC, topic and shop matched; the `_coshop_haul` note attribute named this room and attempt; and `sha256(order.cart_token)` equalled the stored cart hash. `unattributed` means the marker or `cart_token` was missing; `cart_mismatch` means the hashes differed |
+| Log outcomes in receipt order | `recorded`, `recorded`, `duplicate` | `recorded` proves the HMAC, topic and shop matched; the `_coshop_haul` note attribute named this room and attempt; and the order's variant ids and quantities matched the attempt's snapshot. `unattributed` means the marker or `cart_token` was missing; `cart_mismatch` means the shop or the lines differed |
 | A rejected delivery (if any) | `rejected_signature`, `rejected_topic`, `rejected_shop`, `rejected_body` or `rejected_size` | Why the request got a 401 or 413 |
 
 Do not capture or commit order numbers, customer data, raw orders, `note_attributes`, cart
