@@ -884,6 +884,142 @@ const noOverflow = (shopper) =>
     .poll(() => shopper.evaluate(() => document.documentElement.scrollWidth - innerWidth))
     .toBeLessThanOrEqual(0);
 
+async function expectFullyInViewport(page, locator) {
+  const rect = await locator.boundingBox();
+  const viewport = page.viewportSize();
+  expect(rect).not.toBeNull();
+  expect(rect.x).toBeGreaterThanOrEqual(0);
+  expect(rect.y).toBeGreaterThanOrEqual(0);
+  expect(rect.x + rect.width).toBeLessThanOrEqual(viewport.width);
+  expect(rect.y + rect.height).toBeLessThanOrEqual(viewport.height);
+}
+
+test("landing summary, tagline and action fit the first viewport", async ({
+  page,
+}) => {
+  for (const [width, height] of [
+    [390, 844],
+    [360, 800],
+    [1440, 900],
+  ]) {
+    await page.setViewportSize({ width, height });
+    await page.goto(base);
+    await page.evaluate(() => document.fonts.ready);
+    const summary = page.getByText(
+      "Browse on your own, share exact finds, and fill one bag together.",
+      { exact: true },
+    );
+    const tagline = page.getByText("Find it. Share it. Shop together.", {
+      exact: true,
+    });
+    const action = page.getByRole("button", {
+      name: "Start a shopping room",
+    });
+    await expect(summary).toBeVisible();
+    await expectFullyInViewport(page, summary);
+    await expectFullyInViewport(page, tagline);
+    await expectFullyInViewport(page, action);
+    await noOverflow(page);
+    if (process.env.COSHOP_EVIDENCE) {
+      await page.screenshot({
+        path: join(process.env.COSHOP_EVIDENCE, `homepage-${width}x${height}.png`),
+      });
+    }
+  }
+});
+
+test("incoming find alert clears the catalog heading and sticky toolbar", async ({
+  page,
+  browser,
+}) => {
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+  });
+  const maya = await context.newPage();
+  try {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await room(page);
+    await joinRoom(page, maya, "Maya");
+    const heading = maya.getByRole("heading", {
+      name: "Browse the collection",
+    });
+    const headingBefore = await heading.boundingBox();
+
+    await page
+      .getByRole("button", { name: "Quick add Over-Ear Headphones" })
+      .click();
+    const quick = page.getByRole("dialog", { name: "Over-Ear Headphones" });
+    await quick.getByRole("combobox").selectOption("audio-1");
+    await quick.getByRole("button", { name: "Share find" }).click();
+    await expect(quick.getByRole("status")).toHaveText("Shared to Our finds.");
+    const notice = maya.locator(".find-notice");
+    await expect(notice).toContainText("Sam shared Over-Ear Headphones");
+
+    const headingAfter = await heading.boundingBox();
+    const noticeRect = await notice.boundingBox();
+    expect(headingAfter.y).toBe(headingBefore.y);
+    expect(
+      noticeRect.x + noticeRect.width <= headingAfter.x ||
+        headingAfter.x + headingAfter.width <= noticeRect.x ||
+        noticeRect.y + noticeRect.height <= headingAfter.y ||
+        headingAfter.y + headingAfter.height <= noticeRect.y,
+    ).toBe(true);
+    await expectFullyInViewport(maya, notice);
+    await expectFullyInViewport(
+      maya,
+      maya.getByRole("button", { name: "View find", exact: true }),
+    );
+    await noOverflow(maya);
+    if (process.env.COSHOP_EVIDENCE) {
+      await maya.screenshot({
+        path: join(process.env.COSHOP_EVIDENCE, "receiver-alert-top-390x844.png"),
+      });
+    }
+
+    await maya.setViewportSize({ width: 360, height: 800 });
+    await expectFullyInViewport(maya, notice);
+    await expectFullyInViewport(
+      maya,
+      maya.getByRole("button", { name: "View find", exact: true }),
+    );
+    await noOverflow(maya);
+    if (process.env.COSHOP_EVIDENCE) {
+      await maya.screenshot({
+        path: join(process.env.COSHOP_EVIDENCE, "receiver-alert-top-360x800.png"),
+      });
+    }
+
+    await maya.setViewportSize({ width: 390, height: 844 });
+    await maya.evaluate(() => window.scrollTo(0, 500));
+    expect(await maya.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+    const toolbar = maya.locator(".react-presence");
+    const toolbarButtons = [
+      maya.getByRole("button", { name: "Our finds" }),
+      maya.getByRole("button", { name: "Shared bag, 0 items" }),
+    ];
+    const scrolledNoticeRect = await notice.boundingBox();
+    for (const button of toolbarButtons) {
+      const buttonRect = await button.boundingBox();
+      expect(
+        scrolledNoticeRect.x + scrolledNoticeRect.width <= buttonRect.x ||
+          buttonRect.x + buttonRect.width <= scrolledNoticeRect.x ||
+          scrolledNoticeRect.y + scrolledNoticeRect.height <= buttonRect.y ||
+          buttonRect.y + buttonRect.height <= scrolledNoticeRect.y,
+      ).toBe(true);
+    }
+    await expectFullyInViewport(maya, toolbarButtons[0]);
+    await expectFullyInViewport(maya, toolbarButtons[1]);
+    await noOverflow(maya);
+    if (process.env.COSHOP_EVIDENCE) {
+      await maya.screenshot({
+        path: join(process.env.COSHOP_EVIDENCE, "receiver-alert-scrolled-390x844.png"),
+      });
+    }
+  } finally {
+    await context.close();
+  }
+});
+
 for (const width of [360, 390, 1280, 1440]) {
   test(`finds shortcut, in-bag status and picker note for two shoppers at ${width}px`, async ({ page, browser }) => {
     const context = await browser.newContext();

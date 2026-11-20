@@ -53,6 +53,9 @@ export function Landing({ start }) {
         <div className="landing-intro">
           <h1>CoShop</h1>
           <p>Find it. Share it. Shop together.</p>
+          <p className="landing-summary">
+            Browse on your own, share exact finds, and fill one bag together.
+          </p>
           <div className="landing-actions">
             <button className="primary" onClick={() => start()}>
               Start a shopping room
