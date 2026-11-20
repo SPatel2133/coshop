@@ -4,6 +4,10 @@ CoShop lets friends shop the same catalog while staying on their own product pag
 
 **[Try the public demo](https://trycoshop.vercel.app/)** · Sample catalog · No sign-in or installation.
 
+[![Two shoppers in one CoShop room: Sam shares the exact Black headphones and Maya opens them](docs/media/coshop-demo-preview.webp)](docs/media/coshop-demo.mp4)
+
+**[Watch the 45-second demo video](docs/media/coshop-demo.mp4)** (MP4, with sound).
+
 ## Try it in two windows
 
 | Do this | Look for this |
