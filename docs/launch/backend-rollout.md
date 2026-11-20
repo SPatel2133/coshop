@@ -120,7 +120,7 @@ This runs the same command without `--dry-run`. The new version gets 100% of tra
 - [ ] `pnpm exec wrangler deployments status --name coshop` shows the new version at 100%, with the message `GitHub release <SHA>`.
 - [ ] `https://trycoshop.vercel.app/` still serves the intended frontend bundle.
 - [ ] A fresh two-shopper sample flow passes at 390 px and 1440 px, including reconnect.
-- [ ] Workers Observability shows no new Worker errors.
+- [ ] No new Worker errors: keep `pnpm exec wrangler tail coshop --format pretty` open during the checks, and confirm the error count in the Worker's dashboard metrics stays flat.
 - [ ] If you created a controlled pre-release room, its invite still joins.
 - [ ] Update the README backend status only after the checks above pass.
 - [ ] Physical iPhone Safari and real Shopify paid-order attribution stay marked unverified unless someone tests them with authorization.
