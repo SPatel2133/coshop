@@ -57,7 +57,7 @@ for (const [width, columns, gap] of [
     const opener = page.getByRole("button", { name: "Our finds" });
     await opener.focus();
     await page.keyboard.press("Enter");
-    const drawer = page.getByRole("dialog", { name: "Around the room" });
+    const drawer = page.getByRole("dialog", { name: "Our finds" });
     await expect(drawer).toBeVisible();
     expect(await drawer.evaluate((node) => node.matches(":modal"))).toBe(
       width < 1180,
@@ -113,7 +113,7 @@ test("mobile Quick add links senders to Our finds and receivers to the exact fin
     await expect(quick.getByRole("status")).toHaveText("Shared to Our finds.");
     await quick.getByRole("button", { name: "Open Our finds" }).click();
     await expect(quick).toBeHidden();
-    await expect(page.getByRole("dialog", { name: "Around the room" }).locator('[data-find-variant="audio-1"]')).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "Our finds" }).locator('[data-find-variant="audio-1"]')).toBeVisible();
     const launcher = peer.locator("#open-finds");
     await expect(launcher).toHaveAccessibleName("Our finds, 1 new");
     await expect(peer.locator(".find-notice")).toContainText("Sam shared Over-Ear Headphones");
@@ -240,7 +240,7 @@ test("exact saved find, stable browsing, one connection and shared haul", async 
     ).toBeFocused();
 
     await page.getByRole("button", { name: /Our finds/ }).click();
-    const drawer = page.getByRole("dialog", { name: "Around the room" });
+    const drawer = page.getByRole("dialog", { name: "Our finds" });
     await drawer
       .getByRole("button", { name: "Comment on Wristwatch · Tan" })
       .click();
@@ -302,7 +302,7 @@ test("short drawer, failed product photos and 200% reflow", async ({
   expect((await measure()).overflow).toBe(false);
   const opener = page.getByRole("button", { name: "Our finds" });
   await opener.click();
-  const drawer = page.getByRole("dialog", { name: "Around the room" });
+  const drawer = page.getByRole("dialog", { name: "Our finds" });
   const close = drawer.getByRole("button", { name: "Close room panel" });
   await expect(close).toBeFocused();
   await expect(drawer).toHaveCSS("opacity", "1");
@@ -524,7 +524,7 @@ test("three shoppers converge on exact finds across repeats, refresh, and explic
   const contexts = await Promise.all([browser.newContext(), browser.newContext()]);
   const [maya, priya] = await Promise.all(contexts.map((context) => context.newPage()));
   const pages = [page, maya, priya];
-  const panel = (shopper) => shopper.getByRole("dialog", { name: "Around the room" });
+  const panel = (shopper) => shopper.getByRole("dialog", { name: "Our finds" });
   const cards = (shopper) => panel(shopper).locator("[data-find]");
   const black = (shopper) => shopper.getByRole("button", { name: "Black", exact: true });
   const headphones = (shopper) => shopper.getByRole("button", { name: "View Over-Ear Headphones" });
@@ -1051,7 +1051,7 @@ for (const width of [360, 390, 1280, 1440]) {
       const y = await page.evaluate(() => scrollY);
       await trigger.focus();
       await page.keyboard.press("Enter");
-      const panel = page.getByRole("dialog", { name: "Around the room" });
+      const panel = page.getByRole("dialog", { name: "Our finds" });
       const card = panel.locator("[data-find]").filter({ hasText: "Black" });
       await expect(card).toContainText("Not in bag yet");
       await expect(trigger).toHaveAccessibleName("Our finds");
@@ -1359,7 +1359,7 @@ test("opening the desktop finds dock right after a small product-page scroll kee
       await expect.poll(() => page.evaluate(() => scrollY)).toBe(aligned + 9);
       await page.locator("#open-finds").focus();
       await page.keyboard.press("Enter");
-      await expect(page.getByRole("dialog", { name: "Around the room" })).toBeVisible();
+      await expect(page.getByRole("dialog", { name: "Our finds" })).toBeVisible();
       expect(await page.evaluate(() => scrollY)).toBe(aligned + 9);
       await page.keyboard.press("Escape");
       await expect(page.locator("#open-finds")).toBeFocused();
