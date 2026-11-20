@@ -264,7 +264,7 @@ test("a cartCreate response that returns after the lease expired is withheld; it
   assert.deepEqual(attempts(), [
     { id: proposal.id, bound: true, outcome: "withheld" },
   ]);
-  assert.equal(await deliver(proposal.id, "cart-2"), "cart_mismatch");
+  assert.equal(await deliver(proposal.id, "cart-2"), "attempt_not_opened");
   assert.equal(await deliver(proposal.id, "cart-1"), "attempt_not_opened");
 });
 
@@ -348,7 +348,15 @@ test("multiple attempts persist past release and lease expiry; out-of-order and 
     }),
     "recorded",
   );
-  assert.equal(await deliver(first.id, "cart-2", { order: 1 }), "cart_mismatch");
+  assert.equal(
+    await deliver(first.id, "cart-1", { order: 1, quantity: 7 }),
+    "cart_mismatch",
+  );
+  // Shopify's order cart_token is the checkout token, not the cart id token.
+  assert.equal(
+    await deliver(first.id, "checkout-token", { order: 3, quantity: 7 }),
+    "cart_mismatch",
+  );
   assert.equal(
     await deliver(first.id, "cart-1", {
       order: 1,
