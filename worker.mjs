@@ -22,6 +22,12 @@ import {
   stateMessage,
   presenceChanges,
 } from "./server/realtime.js";
+// `scripts/worker-release.mjs` substitutes the packaged checkout's commit.
+const buildCommit =
+  typeof COSHOP_BUILD_COMMIT === "string" &&
+  /^[0-9a-f]{40}$/.test(COSHOP_BUILD_COMMIT)
+    ? COSHOP_BUILD_COMMIT
+    : "unknown";
 const failure = (error) =>
   json(
     errorMessage(error),
@@ -374,6 +380,8 @@ export default {
         if (response.ok) logWebhook(request, (await response.clone().json()).outcome);
         return response;
       }
+      if (url.pathname === "/api/version" && request.method === "GET")
+        return json({ commit: buildCommit });
       const roomPath = url.pathname === "/api/rooms";
       const match = url.pathname.match(
         /^\/api\/rooms\/([^/]+)(?:\/(join|session|socket|catalog|checkout|checkout-release|haul-demo))?$/,
