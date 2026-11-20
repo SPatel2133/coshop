@@ -12,7 +12,7 @@ Recorded 2026-11-19 from read-only Cloudflare inspection and public HTTP.
 
 | Item | Value |
 | --- | --- |
-| Frontend | `https://trycoshop.vercel.app/` serves `index-DbjyFVxe.js` and `index-C-hQA_qm.css`, the same files a local build of `690bafb` produces. The Vercel deployment ID was not recorded. |
+| Frontend | `https://trycoshop.vercel.app/` serves `index-DbjyFVxe.js` and `index-C-hQA_qm.css`, the same files a local build of `690bafb` produces. It is Vercel deployment `dpl_Hqdd4YmVMSyqNN2fzqX5PfTV8NDf` (production target, uploaded from the CLI). Vercel holds no commit for it, so the asset names are the only revision evidence. |
 | Active Worker version | `5a68859d-3695-4032-b909-1c250e62fc2e` (version 3) at 100% of traffic. Deployed 2026-11-18 21:02 UTC. |
 | Worker source revision | `86d9112`, taken from the deployment message `GitHub release 86d9112… - add production alias`. That message is the only revision evidence. The Worker has no `/api/version` route. |
 | Room storage | `ROOMS` binds to the `coshop` script's `RoomObject` SQLite Durable Object namespace. |
