@@ -28,6 +28,7 @@ run([
   "node_modules/wrangler/bin/wrangler.js",
   "deploy",
   // ROOM_FRONTEND_ORIGIN lives only in the Worker's runtime settings.
+  "--env=",
   "--keep-vars",
   "--define",
   `COSHOP_BUILD_COMMIT:"${commit}"`,
