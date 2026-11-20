@@ -1596,6 +1596,14 @@ html.coshop-modal-open body {
   font-size: clamp(16px, 2vw, 22px);
 }
 
+.landing-intro > p.landing-summary {
+  max-width: 36ch;
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 20px;
+}
+
 .landing-ambient {
   position: absolute;
   inset: 0;
@@ -2092,6 +2100,10 @@ html.coshop-modal-open body {
   .react-presence:has(.react-checkout-note, .react-recap-shortcut) .react-share-slot {
     grid-column: 1 / -1;
     flex-wrap: wrap;
+  }
+  .react-presence .find-live-notice {
+    position: fixed;
+    inset: auto 12px 12px auto;
   }
 }
 .react-product-detail .product-copy {
