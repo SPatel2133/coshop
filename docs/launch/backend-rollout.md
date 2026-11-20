@@ -12,8 +12,8 @@ Recorded 2026-11-19 from read-only Cloudflare inspection and public HTTP.
 
 | Item | Value |
 | --- | --- |
-| Frontend | `https://trycoshop.vercel.app/` serves `index-DbjyFVxe.js` and `index-C-hQA_qm.css`, the same files a local build of `690bafb` produces. It is Vercel deployment `dpl_Hqdd4YmVMSyqNN2fzqX5PfTV8NDf` (production target, uploaded from the CLI). Vercel holds no commit for it, so the asset names are the only revision evidence. |
-| Active Worker version | `5a68859d-3695-4032-b909-1c250e62fc2e` (version 3) at 100% of traffic. Deployed 2026-11-18 21:02 UTC. |
+| Frontend | `https://trycoshop.vercel.app/` serves `index-DcdKKuEi.js` and `index-g4cDBWjh.css`, built from `28ab8e8` with `VITE_ROOM_BACKEND_ORIGIN` set to the Worker. It is Vercel deployment `dpl_Dgifn7mHfuCMnUnRjd4gRP5HV4nD` (production target, uploaded from the CLI). |
+| Active Worker version | `41f35bc0-070c-4255-9522-f8e5d39610d1` at 100% of traffic, released from `28ab8e8` on 2026-11-20; `GET /api/version` reports that commit. The previous release is `b54ddaa4-c28d-4773-a921-3b9bcaeae8cb` (`e6d9249`), and before it `5a68859d-3695-4032-b909-1c250e62fc2e`. |
 | Worker source revision | `86d9112`, taken from the deployment message `GitHub release 86d9112… - add production alias`. That message is the only revision evidence. The Worker has no `/api/version` route. |
 | Room storage | `ROOMS` binds to the `coshop` script's `RoomObject` SQLite Durable Object namespace. |
 | Rate limits | `ABUSE_LIMITS` binds to the `coshop` script's `AbuseObject` SQLite Durable Object namespace. |
@@ -90,7 +90,7 @@ git fetch origin
 git switch --detach "$SHA"
 git status --porcelain                     # must be empty
 pnpm install --frozen-lockfile
-pnpm exec wrangler deployments status --name coshop   # expect 5a68859d-… at 100%
+pnpm exec wrangler deployments status --name coshop   # expect the new version at 100%
 pnpm run deploy:cloudflare                 # dry run
 grep -c "\"$SHA\"" dist/release/worker.js  # expect a non-zero count
 ```
@@ -123,19 +123,19 @@ This runs the same command without `--dry-run`. The new version gets 100% of tra
 - [ ] No new Worker errors: keep `pnpm exec wrangler tail coshop --format pretty` open during the checks, and confirm the error count in the Worker's dashboard metrics stays flat.
 - [ ] If you created a controlled pre-release room, its invite still joins.
 - [ ] Update the README backend status only after the checks above pass.
-- [ ] Physical iPhone Safari and real Shopify paid-order attribution stay marked unverified unless someone tests them with authorization.
+- [ ] Physical iPhone Safari and production Shopify paid-order attribution stay marked unverified unless someone tests them with authorization.
 
 ## Rollback
 
 Roll the Worker code back to the previous version:
 
 ```sh
-pnpm exec wrangler rollback 5a68859d-3695-4032-b909-1c250e62fc2e \
-  --name coshop --message "Roll back to 86d9112"
+pnpm exec wrangler rollback b54ddaa4-c28d-4773-a921-3b9bcaeae8cb \
+  --name coshop --message "Roll back to e6d9249"
 ```
 
-- **Data is not rolled back.** Migration 0008 stays applied, and so do any room changes made in the meantime. The checks above showed that `86d9112` runs on schema 8 storage.
-- **`/api/version` disappears.** After a rollback it returns 404 again.
+- **Data is not rolled back.** Migration 0008 stays applied, and so do any room changes made in the meantime. `e6d9249` and the older `86d9112` (`5a68859d-…`) both run on schema 8 storage.
+- **`/api/version` reports the rolled-back commit.** Only rolling back to `5a68859d-…` (`86d9112`) makes it return 404.
 - **Leave the frontend alone.** A backend rollback doesn't need a Vercel change.
 
 ## README wording after verification

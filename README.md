@@ -24,7 +24,7 @@ CoShop lets friends shop the same catalog while staying on their own product pag
 
 - **Public sample completion.** The hosted demo uses sample products and reference prices. **Demo completion · simulated** shows a Haul recap with no payment and no Shopify order.
 - **Synthetic Shopify fixture coverage.** The optional Shopify path uses the Storefront API for catalog data, price and availability checks, and cart creation. [Fixture tests](tests/phase5-attribution.test.mjs) run catalog loading, `cartCreate`, the hosted checkout handoff and HMAC-signed `orders/paid` webhooks against a fake Storefront with webhooks signed by the tests.
-- **Unverified live paid-order attribution.** No real Shopify development store has delivered a paid order to CoShop yet. The [supervised test procedure](docs/shopify-live-verification.md) describes that check.
+- **Live paid-order attribution is verified on a development store only.** Two supervised test-gateway orders on a Shopify development store were recorded in payment order and a signed replay was ignored as a duplicate ([procedure and finding](docs/shopify-live-verification.md)). No production store or real payment has been tested.
 
 ## Run locally
 
