@@ -5,6 +5,14 @@ export const haulAttribute = "_coshop_haul";
 const validId =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+const lineKey = (lines) =>
+  lines
+    .map((line) => line.variantId + "*" + line.quantity)
+    .sort()
+    .join(",");
+const sameLines = (snapshot, order) =>
+  order.every((line) => line.variantId) && lineKey(snapshot) === lineKey(order);
+
 export class Haul {
   constructor(rooms) {
     Object.assign(this, { rooms, store: rooms.store, clock: rooms.clock });
@@ -118,9 +126,7 @@ export class Haul {
   }
   // Returns a privacy-safe outcome code; only "recorded" changes the room.
   async paid(order) {
-    const { room, attempt, shop, cartToken, orderId, totals, lines, paidAt } =
-      order;
-    const tokenHash = await digest(cartToken);
+    const { room, attempt, shop, orderId, totals, lines, paidAt } = order;
     // Orders are deduplicated exactly by a hash of shop and order id.
     const eventKey = "paid:" + (await digest(shop + ":" + orderId));
     const legacyKey = "paid:" + shop + ":" + orderId;
@@ -147,11 +153,13 @@ export class Haul {
       )[0];
       if (!checkout) return "unknown_attempt";
       if (!checkout.cart_token) return "attempt_unbound";
-      if (checkout.shop !== shop || checkout.cart_token !== tokenHash)
-        return "cart_mismatch";
       if (checkout.outcome === "paid") return "attempt_already_paid";
       if (checkout.outcome !== "opened") return "attempt_not_opened";
       const { items: prepared, highlights } = JSON.parse(checkout.snapshot);
+      // Shopify's order cart_token is the checkout token, not the Storefront
+      // cart id token, so the signed order must match the snapshot instead.
+      if (checkout.shop !== shop || !sameLines(prepared, lines))
+        return "cart_mismatch";
       const byVariant = new Map(prepared.map((item) => [item.variantId, item]));
       const items = lines.map((line) => {
         const picked = byVariant.get(line.variantId);

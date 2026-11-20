@@ -234,11 +234,19 @@ test("paid recap follows the verified order, not the unlocked bag or abandoned c
   });
   assert.equal(
     await rooms.haul.paid(
-      (await deliver({ ...event, cart_token: "another-cart" })).order,
+      (
+        await deliver({
+          ...event,
+          line_items: [{ ...event.line_items[0], quantity: 3 }],
+        })
+      ).order,
     ),
     "cart_mismatch",
   );
-  const { order: verified } = await deliver(event);
+  const { order: verified } = await deliver({
+    ...event,
+    cart_token: "checkout-token-differs-from-cart-id",
+  });
   assert.equal(await rooms.haul.paid(verified), "recorded");
   assert.equal(await rooms.haul.paid(verified), "duplicate");
   const { recap } = rooms.snapshot(room);
