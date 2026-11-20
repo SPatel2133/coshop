@@ -39,7 +39,6 @@ These are the backend changes from the deployed `86d9112` to this release:
 - **Committed bag-command replay:** `server/rooms.js`. If a client retries a bag change the server already accepted, it gets the original acknowledgement back, even while checkout locks the bag.
 - **Generic errors:** `server/realtime.js` and `worker.mjs`. Unexpected failures return `SERVER_ERROR` and nothing internal.
 - **Webhook outcome logging:** `server/order-webhook.js` and `worker.mjs`. The log records only the outcome and a well-formed webhook ID.
-- **Observability:** `wrangler.jsonc` turns on persisted Worker logs with full sampling and redacted query strings. Invocation logs and traces stay off.
 - **Build marker:** `GET /api/version` returns `{"commit":"<40-hex SHA>"}`, or `"unknown"` when no commit was stamped. It returns only the commit, with no account identifiers, configuration or credentials.
 
 ### Migration checks
@@ -55,6 +54,25 @@ All on disposable local Wrangler storage, never production:
   - New bag changes succeeded.
   - The attempt with a cart reads `outcome='opened'`, the one without reads `pending`, and the lease gained an empty `checkout_url`.
 - **Code rollback:** `86d9112` started again on the upgraded storage. It resumed the same room (200) with the bag and all three shoppers, and accepted a new bag change.
+
+## Persisted Worker logs
+
+This rollout keeps `"observability": { "enabled": false }`, the same as the active production version, so it changes no logging settings. Persisted logs are a separate approval decision.
+
+- **Enabling them:** replace that line in `wrangler.jsonc` with the following, merge, and run the normal release:
+
+  ```jsonc
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "redact_query_string": true,
+    "logs": { "enabled": true, "head_sampling_rate": 1, "invocation_logs": false, "persist": true },
+    "traces": { "enabled": false },
+  },
+  ```
+
+- **What gets recorded:** the `console.log` outcome line from `logWebhook` in `server/order-webhook.js` (outcome plus a well-formed webhook ID), the `console.warn` in `server/checkout.js`, and uncaught exceptions. Invocation logs and traces stay off because request URLs carry signed invites.
+- **Why it isn't needed now:** the sample demo never calls the webhook or checkout paths, and production has no Shopify configuration. Without persisted logs those lines are still visible live through `wrangler tail`.
 
 ## Approval gate
 
@@ -77,7 +95,7 @@ pnpm run deploy:cloudflare                 # dry run
 grep -c "\"$SHA\"" dist/release/worker.js  # expect a non-zero count
 ```
 
-`scripts/worker-release.mjs` refuses to run on a modified checkout. It reads the commit with `git rev-parse HEAD` and builds the same-origin assets. Then it runs:
+`scripts/worker-release.mjs` refuses to run on a checkout with modified or untracked files, so use a fresh checkout rather than one where the browser suite left `test-results/`. It deletes `dist/release` first and fails if the new bundle does not contain the checkout's commit, so a stale bundle cannot pass. It reads the commit with `git rev-parse HEAD` and builds the same-origin assets. Then it runs:
 
 ```sh
 wrangler deploy --env= --keep-vars \
@@ -117,7 +135,7 @@ pnpm exec wrangler rollback 5a68859d-3695-4032-b909-1c250e62fc2e \
 ```
 
 - **Data is not rolled back.** Migration 0008 stays applied, and so do any room changes made in the meantime. The checks above showed that `86d9112` runs on schema 8 storage.
-- **`/api/version` disappears.** After a rollback it returns 404 again, and observability goes back to off.
+- **`/api/version` disappears.** After a rollback it returns 404 again.
 - **Leave the frontend alone.** A backend rollback doesn't need a Vercel change.
 
 ## README wording after verification
